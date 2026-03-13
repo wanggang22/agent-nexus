@@ -64,13 +64,100 @@ const AGENT_ICONS: Record<string, string> = {
   "Trader Agent": "💹",
 };
 
+// ── Demo data for static GitHub Pages deployment ──
+const DEMO_WALLET = "0x418E21F39411f513E29bFfCa1742868271Eb8a24";
+
+const DEMO_SERVICES: ServicesResponse = {
+  platform: "AgentNexus",
+  version: "1.0.0",
+  description: "AI Agent Service Marketplace on X Layer — pay-per-call via x402",
+  network: "eip155:196",
+  payment: "x402 (USDC on X Layer)",
+  contracts: {
+    AgentRegistry: "0x294f885031544d7Af38D79fe1E9a5c87f3880DEA",
+    PaymentLedger: "0x00e0C1C17E9c3899A0bD362560Ea0Ab8112A4E05",
+  },
+  agents: [
+    {
+      name: "Signal Agent",
+      description: "Real-time on-chain signal detection: smart money, whale alerts, meme scans",
+      endpoint: "http://localhost:4001",
+      services: [
+        { method: "GET", route: "/signals/smart-money", price: "$0.01", description: "Smart money buy signals" },
+        { method: "GET", route: "/signals/whale-alert", price: "$0.02", description: "Whale movement alerts" },
+        { method: "GET", route: "/signals/meme-scan", price: "$0.005", description: "New meme token scan" },
+        { method: "GET", route: "/signals/trending", price: "$0.005", description: "Trending tokens" },
+      ],
+    },
+    {
+      name: "Analyst Agent",
+      description: "Deep technical and fundamental market analysis powered by Claude AI",
+      endpoint: "http://localhost:4002",
+      services: [
+        { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Technical analysis report" },
+        { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Fundamental analysis" },
+        { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "CEX-DEX spread analysis" },
+        { method: "GET", route: "/analysis/full/:token", price: "$0.05", description: "Full analysis report" },
+      ],
+    },
+    {
+      name: "Risk Agent",
+      description: "Pre-trade risk assessment, honeypot detection, portfolio risk",
+      endpoint: "http://localhost:4003",
+      services: [
+        { method: "POST", route: "/risk/assess", price: "$0.01", description: "Pre-trade risk assessment" },
+        { method: "GET", route: "/risk/token-safety/:token", price: "$0.01", description: "Token safety check" },
+        { method: "GET", route: "/risk/portfolio", price: "$0.005", description: "Portfolio risk overview" },
+      ],
+    },
+    {
+      name: "Trader Agent",
+      description: "Trade execution, quote routing, order tracking via OnchainOS",
+      endpoint: "http://localhost:4004",
+      services: [
+        { method: "POST", route: "/trade/quote", price: "$0.005", description: "Get optimal trade quote" },
+        { method: "POST", route: "/trade/execute", price: "$0.05", description: "Execute trade" },
+        { method: "GET", route: "/trade/status/:orderId", price: "free", description: "Track order status" },
+      ],
+    },
+  ],
+};
+
+const DEMO_AGENTS: AgentStatus[] = [
+  { name: "Signal Agent", status: "online", wallet: DEMO_WALLET },
+  { name: "Analyst Agent", status: "online", wallet: DEMO_WALLET },
+  { name: "Risk Agent", status: "online", wallet: DEMO_WALLET },
+  { name: "Trader Agent", status: "online", wallet: DEMO_WALLET },
+];
+
+const DEMO_STATS: Stats = {
+  total_calls: 47,
+  total_revenue_usd: "0.8350",
+  uptime_seconds: 3621,
+  recent_calls: [
+    { agent: "Signal Agent", service: "smart-money", price: 0.01, timestamp: "2026-03-13T15:42:10.000Z" },
+    { agent: "Risk Agent", service: "assess", price: 0.01, timestamp: "2026-03-13T15:42:12.000Z" },
+    { agent: "Analyst Agent", service: "technical", price: 0.02, timestamp: "2026-03-13T15:42:14.000Z" },
+    { agent: "Trader Agent", service: "quote", price: 0.005, timestamp: "2026-03-13T15:42:16.000Z" },
+    { agent: "Signal Agent", service: "whale-alert", price: 0.02, timestamp: "2026-03-13T15:43:01.000Z" },
+    { agent: "Analyst Agent", service: "spread", price: 0.01, timestamp: "2026-03-13T15:43:05.000Z" },
+    { agent: "Risk Agent", service: "token-safety", price: 0.01, timestamp: "2026-03-13T15:43:08.000Z" },
+    { agent: "Trader Agent", service: "execute", price: 0.05, timestamp: "2026-03-13T15:43:12.000Z" },
+    { agent: "Signal Agent", service: "meme-scan", price: 0.005, timestamp: "2026-03-13T15:44:00.000Z" },
+    { agent: "Signal Agent", service: "trending", price: 0.005, timestamp: "2026-03-13T15:44:30.000Z" },
+    { agent: "Analyst Agent", service: "full", price: 0.05, timestamp: "2026-03-13T15:45:02.000Z" },
+    { agent: "Risk Agent", service: "portfolio", price: 0.005, timestamp: "2026-03-13T15:45:20.000Z" },
+  ],
+};
+
 export default function Dashboard() {
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [stats, setStats] = useState<Stats>({ total_calls: 0, total_revenue_usd: "0", recent_calls: [] });
   const [services, setServices] = useState<ServicesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [connected, setConnected] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -83,10 +170,16 @@ export default function Dashboard() {
       setStats(statsRes);
       setServices(servicesRes);
       setConnected(true);
+      setDemoMode(false);
       setLastUpdate(new Date());
-    } catch (e) {
-      console.error("Failed to fetch data:", e);
+    } catch {
+      // Gateway unreachable — use demo data
+      setAgents(DEMO_AGENTS);
+      setStats(DEMO_STATS);
+      setServices(DEMO_SERVICES);
       setConnected(false);
+      setDemoMode(true);
+      setLastUpdate(new Date());
     } finally {
       setLoading(false);
     }
@@ -94,9 +187,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000);
+    const interval = setInterval(fetchData, connected ? 5000 : 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [connected]);
 
   const onlineCount = agents.filter((a) => a.status === "online").length;
 
@@ -105,38 +198,45 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">
-            AgentNexus
-          </h1>
+          <h1 className="text-3xl font-bold text-white">AgentNexus</h1>
           <p className="text-gray-400 mt-1">AI Agent Service Marketplace on X Layer</p>
         </div>
         <div className="flex items-center gap-3">
-          {lastUpdate && (
+          {demoMode && (
+            <span className="text-xs bg-nexus-yellow/20 text-nexus-yellow px-2 py-0.5 rounded">
+              DEMO
+            </span>
+          )}
+          {lastUpdate && !demoMode && (
             <span className="text-xs text-gray-600">
-              {connected ? "live" : "disconnected"} · {lastUpdate.toLocaleTimeString()}
+              live · {lastUpdate.toLocaleTimeString()}
             </span>
           )}
           <span className="text-xs text-gray-500 font-mono border border-nexus-border px-2 py-0.5 rounded">
             eip155:196
           </span>
           <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-            !connected ? "bg-nexus-red/20 text-nexus-red" :
-            onlineCount > 0 ? "bg-nexus-green/20 text-nexus-green" : "bg-nexus-yellow/20 text-nexus-yellow"
+            demoMode ? "bg-nexus-yellow/20 text-nexus-yellow" :
+            onlineCount > 0 ? "bg-nexus-green/20 text-nexus-green" : "bg-nexus-red/20 text-nexus-red"
           }`}>
-            {connected ? `${onlineCount}/${agents.length} Online` : "Gateway Offline"}
+            {demoMode ? "Demo Mode" : `${onlineCount}/${agents.length} Online`}
           </div>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center text-gray-500 mt-20">Connecting to gateway...</div>
-      ) : !connected ? (
-        <div className="text-center mt-20">
-          <div className="text-nexus-red text-lg mb-2">Gateway Unreachable</div>
-          <p className="text-gray-500 text-sm">Make sure all services are running: <code className="text-gray-400">bash start.sh</code></p>
-        </div>
       ) : (
         <>
+          {demoMode && (
+            <div className="card mb-6 border-nexus-yellow/30">
+              <p className="text-sm text-nexus-yellow">
+                Showing demo data — gateway is not running locally.
+                To see live data, clone the repo and run <code className="bg-nexus-bg px-1 rounded">bash start.sh</code>
+              </p>
+            </div>
+          )}
+
           {/* Stats Row */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="card">
@@ -303,6 +403,13 @@ export default function Dashboard() {
           {/* Footer */}
           <div className="mt-8 text-center text-xs text-gray-600">
             AgentNexus v{services?.version || "1.0.0"} · X Layer AI Agent Hackathon
+            {demoMode && (
+              <span className="block mt-1">
+                <a href="https://github.com/wanggang22/agent-nexus" target="_blank" rel="noopener noreferrer" className="text-nexus-accent hover:underline">
+                  View source on GitHub
+                </a>
+              </span>
+            )}
           </div>
         </>
       )}
