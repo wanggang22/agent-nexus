@@ -8,8 +8,12 @@
  * - Records payment on-chain via PaymentLedger
  */
 
-import type { Request, Response, NextFunction } from "express";
 import { XLAYER_CAIP2, XLAYER_USDC } from "./xlayer.js";
+
+// Use generic types to avoid cross-package @types/express version conflicts
+type Req = { method: string; path: string; headers: Record<string, any> };
+type Res = { setHeader(k: string, v: string): void; status(code: number): Res; json(body: any): void; statusCode: number };
+type Next = () => void;
 
 interface RoutePrice {
   price: string; // e.g. "$0.01"
@@ -60,11 +64,11 @@ function matchRoute(method: string, path: string, routes: Record<string, RoutePr
 }
 
 export function x402PaymentMiddleware(config: X402Config) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Req, res: Res, next: Next): void => {
     const routeConfig = matchRoute(req.method, req.path, config.routes);
 
     // No pricing for this route — pass through
-    if (!routeConfig) return next();
+    if (!routeConfig) { next(); return; }
 
     // Check for payment header
     const paymentHeader = req.headers["payment-signature"] || req.headers["x-payment"];
@@ -90,7 +94,7 @@ export function x402PaymentMiddleware(config: X402Config) {
 
       const encoded = Buffer.from(JSON.stringify(requirements)).toString("base64");
       res.setHeader("PAYMENT-REQUIRED", encoded);
-      return res.status(402).json({
+      res.status(402).json({
         error: "Payment Required",
         price: routeConfig.price,
         description: routeConfig.description,
@@ -99,6 +103,7 @@ export function x402PaymentMiddleware(config: X402Config) {
         payTo: config.payTo,
         x402Info: "Send payment via x402 protocol. Include PAYMENT-SIGNATURE header with signed payment.",
       });
+      return;
     }
 
     // Payment header present
@@ -112,7 +117,8 @@ export function x402PaymentMiddleware(config: X402Config) {
       };
       const encoded = Buffer.from(JSON.stringify(settlementResponse)).toString("base64");
       res.setHeader("PAYMENT-RESPONSE", encoded);
-      return next();
+      next();
+      return;
     }
 
     // Production: verify with Facilitator

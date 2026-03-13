@@ -18,6 +18,15 @@ function gatherMarketData(tokenAddress: string, chain: string): Record<string, s
   };
 }
 
+function extractJson(text: string): string {
+  // Try to find JSON in markdown code blocks or raw text
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlockMatch) return codeBlockMatch[1].trim();
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) return jsonMatch[0];
+  return text;
+}
+
 async function aiAnalyze(data: Record<string, string>, analysisType: string): Promise<string> {
   if (!env.ANTHROPIC_API_KEY) return "{}";
 
@@ -28,21 +37,24 @@ async function aiAnalyze(data: Record<string, string>, analysisType: string): Pr
     messages: [
       {
         role: "user",
-        content: `Crypto analyst. Analyze and return JSON for ${analysisType}.
+        content: `You are a crypto market analyst. Analyze the following on-chain data and return a ${analysisType} analysis as JSON.
 
-Data:
+On-chain data:
 ${Object.entries(data)
   .filter(([_, v]) => v)
-  .map(([k, v]) => `${k}: ${v.slice(0, 500)}`)
+  .map(([k, v]) => `[${k}]: ${v.slice(0, 500)}`)
   .join("\n\n")}
 
-Return ONLY valid JSON. technical: {trend,support,resistance,rsi_14,volume_trend}. fundamental: {holder_concentration,honeypot,buy_tax,sell_tax,liquidity_usd}. spread: {cex_price,dex_price,spread_pct,arbitrage_viable,est_profit_after_fees}.`,
+Return ONLY valid JSON (no markdown, no explanation).
+${analysisType === "technical" ? 'Schema: {"trend":"bullish"|"bearish"|"neutral","support":number,"resistance":number,"rsi_14":number,"volume_trend":"increasing"|"decreasing"|"stable"}' : ""}
+${analysisType === "fundamental" ? 'Schema: {"holder_concentration":"low_risk"|"medium_risk"|"high_risk","honeypot":boolean,"buy_tax":number,"sell_tax":number,"liquidity_usd":number}' : ""}
+${analysisType === "spread" ? 'Schema: {"cex_price":number,"dex_price":number,"spread_pct":number,"arbitrage_viable":boolean,"est_profit_after_fees":number}' : ""}`,
       },
     ],
   });
 
   const content = msg.content[0];
-  return content.type === "text" ? content.text : "{}";
+  return content.type === "text" ? extractJson(content.text) : "{}";
 }
 
 export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"): Promise<TechnicalAnalysis> {
