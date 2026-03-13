@@ -26,23 +26,32 @@ PIDS="$PIDS $!"
 
 sleep 2
 
+# Start Telegram Bot (if token is set)
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+  npx tsx packages/telegram-bot/src/bot.ts &
+  PIDS="$PIDS $!"
+fi
+
 echo ""
-echo "╔══════════════════════════════════════╗"
-echo "║     All services started             ║"
-echo "╠══════════════════════════════════════╣"
-echo "║  Gateway:  http://localhost:4000     ║"
-echo "║  Signal:   http://localhost:4001     ║"
-echo "║  Analyst:  http://localhost:4002     ║"
-echo "║  Risk:     http://localhost:4003     ║"
-echo "║  Trader:   http://localhost:4004     ║"
-echo "╠══════════════════════════════════════╣"
-echo "║  Dashboard: cd packages/dashboard   ║"
-echo "║             npx next dev            ║"
-echo "╠══════════════════════════════════════╣"
-echo "║  Demo: npx tsx packages/demo-client/src/demo.ts  ║"
-echo "╠══════════════════════════════════════╣"
-echo "║  Press Ctrl+C to stop all           ║"
-echo "╚══════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════╗"
+echo "║       All services started               ║"
+echo "╠══════════════════════════════════════════╣"
+echo "║  Gateway:  http://localhost:4000          ║"
+echo "║  Signal:   http://localhost:4001          ║"
+echo "║  Analyst:  http://localhost:4002          ║"
+echo "║  Risk:     http://localhost:4003          ║"
+echo "║  Trader:   http://localhost:4004          ║"
+echo "╠══════════════════════════════════════════╣"
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+echo "║  Telegram Bot: running                    ║"
+else
+echo "║  Telegram Bot: set TELEGRAM_BOT_TOKEN     ║"
+fi
+echo "╠══════════════════════════════════════════╣"
+echo "║  Chat:  POST http://localhost:4000/chat   ║"
+echo "║  Demo:  npx tsx packages/demo-client/...  ║"
+echo "║  Press Ctrl+C to stop all                 ║"
+echo "╚══════════════════════════════════════════╝"
 echo ""
 
 # Cleanup on exit
