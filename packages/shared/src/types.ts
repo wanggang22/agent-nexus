@@ -37,6 +37,22 @@ export interface SpreadAnalysis {
   est_profit_after_fees: number;
 }
 
+export interface MemeAnalysis {
+  virality_score: number;        // 0-100, overall meme potential
+  narrative_strength: string;    // "strong" | "moderate" | "weak" | "none"
+  cultural_appeal: string;       // AI assessment of name/symbol cultural resonance
+  community_metrics: {
+    twitter_mentions: number;
+    social_score: number;
+    unique_traders_24h: number;
+    holder_growth_trend: string; // "explosive" | "growing" | "stable" | "declining"
+  };
+  smart_money_sentiment: string; // "accumulating" | "holding" | "dumping" | "absent"
+  kol_activity: string;          // AI assessment of KOL involvement
+  risk_factors: string[];        // e.g. ["insider_heavy", "low_liquidity"]
+  catalyst: string;              // AI assessment of potential catalysts
+}
+
 export interface AnalysisReport {
   analysis_id: string;
   token: string;
@@ -44,8 +60,10 @@ export interface AnalysisReport {
   technical?: TechnicalAnalysis;
   fundamental?: FundamentalAnalysis;
   spread?: SpreadAnalysis;
+  meme?: MemeAnalysis;
   recommendation: "BUY" | "SELL" | "HOLD" | "AVOID";
   confidence: number;
+  reasoning: string;
   timestamp: string;
 }
 

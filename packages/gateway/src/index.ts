@@ -36,7 +36,8 @@ const AGENTS = [
       { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Technical analysis report" },
       { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Fundamental analysis" },
       { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "CEX-DEX spread analysis" },
-      { method: "GET", route: "/analysis/full/:token", price: "$0.05", description: "Full analysis report" },
+      { method: "GET", route: "/analysis/meme/:token", price: "$0.03", description: "Meme virality & community analysis" },
+      { method: "GET", route: "/analysis/full/:token", price: "$0.08", description: "Full analysis (technical + fundamental + meme)" },
     ],
   },
   {
