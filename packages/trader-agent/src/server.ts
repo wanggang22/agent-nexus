@@ -35,11 +35,11 @@ app.get("/health", (_req, res) => {
 
 app.post("/trade/quote", async (req, res) => {
   try {
-    const { from_token, to_token, amount, chain } = req.body;
+    const { from_token, to_token, amount, chain, slippage } = req.body;
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const quote = await getQuote(from_token, to_token, amount, chain);
+    const quote = await getQuote(from_token, to_token, amount, chain, slippage);
     recordCall(AGENT, "quote", 0.005);
     res.json(quote);
   } catch (e: any) {
@@ -49,11 +49,11 @@ app.post("/trade/quote", async (req, res) => {
 
 app.post("/trade/execute", async (req, res) => {
   try {
-    const { from_token, to_token, amount, chain } = req.body;
+    const { from_token, to_token, amount, chain, slippage } = req.body;
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const result = await executeTrade(from_token, to_token, amount, chain);
+    const result = await executeTrade(from_token, to_token, amount, chain, slippage);
     recordCall(AGENT, "execute", 0.05);
     res.json(result);
   } catch (e: any) {
@@ -64,7 +64,8 @@ app.post("/trade/execute", async (req, res) => {
 app.get("/trade/status/:orderId", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await getOrderStatus(req.params.orderId, chain);
+    const txHash = req.query.tx_hash as string;
+    const result = await getOrderStatus(req.params.orderId, chain, txHash);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

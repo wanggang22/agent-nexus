@@ -76,7 +76,9 @@ export interface TradeQuote {
   chain: string;
   amount_in: string;
   expected_out: string;
+  min_out: string;
   price_impact: number;
+  slippage: string;
   route: string;
   expires_at: string;
 }
