@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { technicalAnalysis, fundamentalAnalysis, spreadAnalysis, memeAnalysis, fullAnalysis } from "./analysis.js";
+import { technicalAnalysis, fundamentalAnalysis, spreadAnalysis, memeAnalysis, fullAnalysis, getAiCostStats } from "./analysis.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Analyst Agent";
@@ -28,6 +28,11 @@ app.use(
 
 app.get("/health", (_req, res) => {
   res.json({ agent: AGENT, status: "online", wallet: account.address, timestamp: new Date().toISOString() });
+});
+
+// AI cost stats — free, for monitoring
+app.get("/ai-stats", (_req, res) => {
+  res.json(getAiCostStats());
 });
 
 app.get("/analysis/technical/:token", async (req, res) => {

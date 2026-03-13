@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown } from "shared";
+import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
 import { getQuote, executeTrade, getOrderStatus, getWalletAddress } from "./executor.js";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -12,18 +12,7 @@ app.use(cors());
 app.use(express.json());
 app.use(requestLogger(AGENT));
 
-app.use(
-  x402PaymentMiddleware({
-    payTo: account.address,
-    mockMode: true,
-    routes: {
-      "POST /trade/quote": { price: "$0.005", description: "Get optimal trade quote" },
-      "POST /trade/execute": { price: "$0.05", description: "Execute trade" },
-      // GET /trade/status is free — not listed here
-    },
-  })
-);
-
+// All Trader Agent services are FREE — powered by OnchainOS CLI, no AI cost
 app.get("/health", (_req, res) => {
   res.json({
     agent: AGENT,
@@ -40,7 +29,7 @@ app.post("/trade/quote", async (req, res) => {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
     const quote = await getQuote(from_token, to_token, amount, chain, slippage);
-    recordCall(AGENT, "quote", 0.005);
+    recordCall(AGENT, "quote", 0);
     res.json(quote);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -54,7 +43,7 @@ app.post("/trade/execute", async (req, res) => {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
     const result = await executeTrade(from_token, to_token, amount, chain, slippage);
-    recordCall(AGENT, "execute", 0.05);
+    recordCall(AGENT, "execute", 0);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -76,8 +65,9 @@ const PORT = 4004;
 const server = app.listen(PORT, () => {
   console.log(`\n💹 ${AGENT} running on http://localhost:${PORT}`);
   console.log(`   Wallet: ${getWalletAddress()}`);
-  console.log(`   POST /trade/quote    ($0.005)`);
-  console.log(`   POST /trade/execute  ($0.05)`);
+  console.log(`   All services FREE (powered by OnchainOS)`);
+  console.log(`   POST /trade/quote           (free)`);
+  console.log(`   POST /trade/execute         (free)`);
   console.log(`   GET  /trade/status/:orderId (free)\n`);
 });
 setupGracefulShutdown(server, AGENT);

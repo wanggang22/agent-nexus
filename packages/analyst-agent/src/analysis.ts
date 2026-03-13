@@ -8,6 +8,47 @@ function generateId(): string {
   return `ana_${date}_${rand}`;
 }
 
+// ── Cache: same token + same analysis type within TTL → return cached ──
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const cache = new Map<string, { result: string; expiry: number }>();
+
+function getCached(key: string): string | null {
+  const entry = cache.get(key);
+  if (entry && Date.now() < entry.expiry) return entry.result;
+  if (entry) cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, result: string) {
+  cache.set(key, { result, expiry: Date.now() + CACHE_TTL_MS });
+  // Prune old entries if cache gets too big
+  if (cache.size > 200) {
+    const now = Date.now();
+    for (const [k, v] of cache) {
+      if (now >= v.expiry) cache.delete(k);
+    }
+  }
+}
+
+// ── Cost tracking ──
+let totalInputTokens = 0;
+let totalOutputTokens = 0;
+let totalCalls = 0;
+const DAILY_CALL_LIMIT = 500;
+let dailyCallCount = 0;
+let lastResetDate = new Date().toDateString();
+
+export function getAiCostStats() {
+  return {
+    total_ai_calls: totalCalls,
+    total_input_tokens: totalInputTokens,
+    total_output_tokens: totalOutputTokens,
+    est_cost_usd: ((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4),
+    daily_calls_remaining: DAILY_CALL_LIMIT - dailyCallCount,
+    cache_size: cache.size,
+  };
+}
+
 function gatherMarketData(tokenAddress: string, chain: string): Record<string, string> {
   return {
     price: runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`),
@@ -154,21 +195,46 @@ Return ONLY valid JSON:
 {"virality_score":number,"narrative_strength":"strong"|"moderate"|"weak"|"none","cultural_appeal":"string","community_metrics":{"twitter_mentions":number,"social_score":number,"unique_traders_24h":number,"holder_growth_trend":"explosive"|"growing"|"stable"|"declining"},"smart_money_sentiment":"accumulating"|"holding"|"dumping"|"absent","kol_activity":"string","risk_factors":["string"],"catalyst":"string"}`,
 };
 
-async function aiAnalyze(data: Record<string, string>, analysisType: string): Promise<string> {
+async function aiAnalyze(data: Record<string, string>, analysisType: string, cacheKey?: string): Promise<string> {
   if (!env.ANTHROPIC_API_KEY) return "{}";
+
+  // Daily limit reset
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
+    dailyCallCount = 0;
+    lastResetDate = today;
+  }
+
+  // Check daily limit
+  if (dailyCallCount >= DAILY_CALL_LIMIT) {
+    console.warn("[Analyst] Daily AI call limit reached");
+    return "{}";
+  }
+
+  // Check cache
+  if (cacheKey) {
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log(`[Analyst] Cache hit: ${cacheKey}`);
+      return cached;
+    }
+  }
 
   const prompt = PROMPTS[analysisType];
   if (!prompt) return "{}";
 
+  // Truncate data to control input tokens
+  // Each data field: max 400 chars (down from 600), max 6 fields shown
   const dataSection = Object.entries(data)
     .filter(([_, v]) => v)
-    .map(([k, v]) => `[${k}]: ${v.slice(0, 600)}`)
+    .slice(0, 8)
+    .map(([k, v]) => `[${k}]: ${v.slice(0, 400)}`)
     .join("\n\n");
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   const msg = await client.messages.create({
     model: "claude-sonnet-4-5-20250514",
-    max_tokens: analysisType === "meme" ? 800 : 500,
+    max_tokens: analysisType === "meme" ? 600 : 400,
     messages: [
       {
         role: "user",
@@ -177,8 +243,19 @@ async function aiAnalyze(data: Record<string, string>, analysisType: string): Pr
     ],
   });
 
+  // Track costs
+  totalCalls++;
+  dailyCallCount++;
+  totalInputTokens += msg.usage.input_tokens;
+  totalOutputTokens += msg.usage.output_tokens;
+
   const content = msg.content[0];
-  return content.type === "text" ? extractJson(content.text) : "{}";
+  const result = content.type === "text" ? extractJson(content.text) : "{}";
+
+  // Cache result
+  if (cacheKey) setCache(cacheKey, result);
+
+  return result;
 }
 
 export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"): Promise<TechnicalAnalysis> {
@@ -190,7 +267,7 @@ export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"):
   }
 
   try {
-    const result = await aiAnalyze(data, "technical");
+    const result = await aiAnalyze(data, "technical", `tech_${tokenAddress}_${chain}`);
     return JSON.parse(result);
   } catch {
     return { trend: "neutral", support: 0, resistance: 0, rsi_14: 50, volume_trend: "stable" };
@@ -206,7 +283,7 @@ export async function fundamentalAnalysis(tokenAddress: string, chain = "xlayer"
   }
 
   try {
-    const result = await aiAnalyze(data, "fundamental");
+    const result = await aiAnalyze(data, "fundamental", `fund_${tokenAddress}_${chain}`);
     return JSON.parse(result);
   } catch {
     return { holder_concentration: "medium_risk", honeypot: false, buy_tax: 0, sell_tax: 0, liquidity_usd: 0 };
@@ -224,7 +301,7 @@ export async function spreadAnalysis(tokenAddress: string, chain = "xlayer"): Pr
   }
 
   try {
-    const result = await aiAnalyze(data, "spread");
+    const result = await aiAnalyze(data, "spread", `spread_${tokenAddress}_${chain}`);
     return JSON.parse(result);
   } catch {
     return { cex_price: 0, dex_price: 0, spread_pct: 0, arbitrage_viable: false, est_profit_after_fees: 0 };
@@ -249,7 +326,7 @@ export async function memeAnalysis(tokenAddress: string, chain = "xlayer"): Prom
   if (!hasData) return DEFAULT_MEME;
 
   try {
-    const result = await aiAnalyze(data, "meme");
+    const result = await aiAnalyze(data, "meme", `meme_${tokenAddress}_${chain}`);
     return JSON.parse(result);
   } catch {
     return DEFAULT_MEME;
