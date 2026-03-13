@@ -80,43 +80,44 @@ const DEMO_SERVICES: ServicesResponse = {
   agents: [
     {
       name: "Signal Agent",
-      description: "Real-time on-chain signal detection: smart money, whale alerts, meme scans",
+      description: "Real-time on-chain signal detection via OnchainOS — FREE",
       endpoint: "http://localhost:4001",
       services: [
-        { method: "GET", route: "/signals/smart-money", price: "$0.01", description: "Smart money buy signals" },
-        { method: "GET", route: "/signals/whale-alert", price: "$0.02", description: "Whale movement alerts" },
-        { method: "GET", route: "/signals/meme-scan", price: "$0.005", description: "New meme token scan" },
-        { method: "GET", route: "/signals/trending", price: "$0.005", description: "Trending tokens" },
+        { method: "GET", route: "/signals/smart-money", price: "free", description: "Smart money buy signals" },
+        { method: "GET", route: "/signals/whale-alert", price: "free", description: "Whale movement alerts" },
+        { method: "GET", route: "/signals/meme-scan", price: "free", description: "New meme token scan" },
+        { method: "GET", route: "/signals/trending", price: "free", description: "Trending tokens" },
       ],
     },
     {
       name: "Analyst Agent",
-      description: "Deep technical and fundamental market analysis powered by Claude AI",
+      description: "Deep market analysis powered by Claude AI — paid (covers AI cost)",
       endpoint: "http://localhost:4002",
       services: [
-        { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Technical analysis report" },
-        { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Fundamental analysis" },
-        { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "CEX-DEX spread analysis" },
-        { method: "GET", route: "/analysis/full/:token", price: "$0.05", description: "Full analysis report" },
+        { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Technical analysis (AI)" },
+        { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Fundamental analysis (AI)" },
+        { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "CEX-DEX spread analysis (AI)" },
+        { method: "GET", route: "/analysis/meme/:token", price: "$0.03", description: "Meme virality & community (AI)" },
+        { method: "GET", route: "/analysis/full/:token", price: "$0.08", description: "Full analysis — all dimensions (AI)" },
       ],
     },
     {
       name: "Risk Agent",
-      description: "Pre-trade risk assessment, honeypot detection, portfolio risk",
+      description: "Pre-trade risk assessment via OnchainOS — FREE",
       endpoint: "http://localhost:4003",
       services: [
-        { method: "POST", route: "/risk/assess", price: "$0.01", description: "Pre-trade risk assessment" },
-        { method: "GET", route: "/risk/token-safety/:token", price: "$0.01", description: "Token safety check" },
-        { method: "GET", route: "/risk/portfolio", price: "$0.005", description: "Portfolio risk overview" },
+        { method: "POST", route: "/risk/assess", price: "free", description: "Pre-trade risk assessment" },
+        { method: "GET", route: "/risk/token-safety/:token", price: "free", description: "Token safety check" },
+        { method: "GET", route: "/risk/portfolio", price: "free", description: "Portfolio risk overview" },
       ],
     },
     {
       name: "Trader Agent",
-      description: "Trade execution, quote routing, order tracking via OnchainOS",
+      description: "Trade execution via OnchainOS + OKX DEX — FREE",
       endpoint: "http://localhost:4004",
       services: [
-        { method: "POST", route: "/trade/quote", price: "$0.005", description: "Get optimal trade quote" },
-        { method: "POST", route: "/trade/execute", price: "$0.05", description: "Execute trade" },
+        { method: "POST", route: "/trade/quote", price: "free", description: "Optimal quote with auto slippage" },
+        { method: "POST", route: "/trade/execute", price: "free", description: "Execute trade" },
         { method: "GET", route: "/trade/status/:orderId", price: "free", description: "Track order status" },
       ],
     },
@@ -131,22 +132,22 @@ const DEMO_AGENTS: AgentStatus[] = [
 ];
 
 const DEMO_STATS: Stats = {
-  total_calls: 47,
-  total_revenue_usd: "0.8350",
+  total_calls: 52,
+  total_revenue_usd: "0.3500",
   uptime_seconds: 3621,
   recent_calls: [
-    { agent: "Signal Agent", service: "smart-money", price: 0.01, timestamp: "2026-03-13T15:42:10.000Z" },
-    { agent: "Risk Agent", service: "assess", price: 0.01, timestamp: "2026-03-13T15:42:12.000Z" },
-    { agent: "Analyst Agent", service: "technical", price: 0.02, timestamp: "2026-03-13T15:42:14.000Z" },
-    { agent: "Trader Agent", service: "quote", price: 0.005, timestamp: "2026-03-13T15:42:16.000Z" },
-    { agent: "Signal Agent", service: "whale-alert", price: 0.02, timestamp: "2026-03-13T15:43:01.000Z" },
-    { agent: "Analyst Agent", service: "spread", price: 0.01, timestamp: "2026-03-13T15:43:05.000Z" },
-    { agent: "Risk Agent", service: "token-safety", price: 0.01, timestamp: "2026-03-13T15:43:08.000Z" },
-    { agent: "Trader Agent", service: "execute", price: 0.05, timestamp: "2026-03-13T15:43:12.000Z" },
-    { agent: "Signal Agent", service: "meme-scan", price: 0.005, timestamp: "2026-03-13T15:44:00.000Z" },
-    { agent: "Signal Agent", service: "trending", price: 0.005, timestamp: "2026-03-13T15:44:30.000Z" },
-    { agent: "Analyst Agent", service: "full", price: 0.05, timestamp: "2026-03-13T15:45:02.000Z" },
-    { agent: "Risk Agent", service: "portfolio", price: 0.005, timestamp: "2026-03-13T15:45:20.000Z" },
+    { agent: "Signal Agent", service: "smart-money", price: 0, timestamp: "2026-03-14T10:01:10.000Z" },
+    { agent: "Signal Agent", service: "whale-alert", price: 0, timestamp: "2026-03-14T10:01:15.000Z" },
+    { agent: "Risk Agent", service: "token-safety", price: 0, timestamp: "2026-03-14T10:02:01.000Z" },
+    { agent: "Analyst Agent", service: "technical", price: 0.02, timestamp: "2026-03-14T10:02:30.000Z" },
+    { agent: "Analyst Agent", service: "meme", price: 0.03, timestamp: "2026-03-14T10:03:05.000Z" },
+    { agent: "Analyst Agent", service: "full", price: 0.08, timestamp: "2026-03-14T10:04:00.000Z" },
+    { agent: "Trader Agent", service: "quote", price: 0, timestamp: "2026-03-14T10:05:12.000Z" },
+    { agent: "Trader Agent", service: "execute", price: 0, timestamp: "2026-03-14T10:05:20.000Z" },
+    { agent: "Signal Agent", service: "trending", price: 0, timestamp: "2026-03-14T10:06:00.000Z" },
+    { agent: "Risk Agent", service: "assess", price: 0, timestamp: "2026-03-14T10:06:30.000Z" },
+    { agent: "Analyst Agent", service: "fundamental", price: 0.03, timestamp: "2026-03-14T10:07:15.000Z" },
+    { agent: "Signal Agent", service: "meme-scan", price: 0, timestamp: "2026-03-14T10:08:00.000Z" },
   ],
 };
 
@@ -262,29 +263,61 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* x402 Protocol Info */}
+          {/* How to Use */}
           <div className="card mb-6">
-            <h2 className="text-lg font-semibold text-white mb-3">x402 Payment Protocol</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-center">
-              <div className="bg-nexus-bg rounded-lg p-3">
-                <div className="text-nexus-accent font-mono text-xs mb-1">Step 1</div>
-                <div className="text-gray-300">Agent calls endpoint</div>
-                <div className="text-gray-500 text-xs mt-1">GET /signals/smart-money</div>
+            <h2 className="text-lg font-semibold text-white mb-3">How to Use AgentNexus</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="bg-nexus-bg rounded-lg p-4">
+                <div className="text-2xl mb-2">💬</div>
+                <div className="text-white font-medium mb-1">Natural Language</div>
+                <div className="text-gray-400 text-xs mb-2">Just talk — Chinese or English</div>
+                <code className="text-nexus-accent text-xs block bg-nexus-card p-2 rounded">
+                  POST /chat<br/>
+                  {`{"message": "分析下ETH"}`}
+                </code>
               </div>
-              <div className="bg-nexus-bg rounded-lg p-3">
-                <div className="text-nexus-yellow font-mono text-xs mb-1">Step 2</div>
-                <div className="text-gray-300">402 Payment Required</div>
-                <div className="text-gray-500 text-xs mt-1">Returns price + payment details</div>
+              <div className="bg-nexus-bg rounded-lg p-4">
+                <div className="text-2xl mb-2">🐦</div>
+                <div className="text-white font-medium mb-1">Twitter</div>
+                <div className="text-gray-400 text-xs mb-2">Tweet @AgentNexus to interact</div>
+                <code className="text-gray-500 text-xs block bg-nexus-card p-2 rounded">
+                  @AgentNexus analyze ETH
+                </code>
               </div>
-              <div className="bg-nexus-bg rounded-lg p-3">
-                <div className="text-nexus-accent font-mono text-xs mb-1">Step 3</div>
-                <div className="text-gray-300">Agent sends USDC</div>
-                <div className="text-gray-500 text-xs mt-1">PAYMENT-SIGNATURE header</div>
+              <div className="bg-nexus-bg rounded-lg p-4">
+                <div className="text-2xl mb-2">🤖</div>
+                <div className="text-white font-medium mb-1">Telegram Bot</div>
+                <div className="text-gray-400 text-xs mb-2">Direct message the bot</div>
+                <code className="text-gray-500 text-xs block bg-nexus-card p-2 rounded">
+                  Send any message to start
+                </code>
               </div>
-              <div className="bg-nexus-bg rounded-lg p-3">
-                <div className="text-nexus-green font-mono text-xs mb-1">Step 4</div>
-                <div className="text-gray-300">Service delivered</div>
-                <div className="text-gray-500 text-xs mt-1">Data + settlement receipt</div>
+            </div>
+          </div>
+
+          {/* Pricing Model */}
+          <div className="card mb-6">
+            <h2 className="text-lg font-semibold text-white mb-3">Pricing Model</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="bg-nexus-bg rounded-lg p-4">
+                <div className="text-nexus-green font-medium mb-2">FREE — OnchainOS Services</div>
+                <div className="text-gray-400 text-xs space-y-1">
+                  <div>Signal Agent — smart money, whale alerts, meme scan, trending</div>
+                  <div>Risk Agent — honeypot detection, token safety, portfolio risk</div>
+                  <div>Trader Agent — swap quotes, trade execution, order tracking</div>
+                </div>
+                <div className="text-gray-500 text-xs mt-2 italic">Powered by OnchainOS CLI — no AI cost</div>
+              </div>
+              <div className="bg-nexus-bg rounded-lg p-4">
+                <div className="text-nexus-yellow font-medium mb-2">PAID — Claude AI Analysis</div>
+                <div className="text-gray-400 text-xs space-y-1">
+                  <div>Technical analysis — $0.02</div>
+                  <div>Fundamental analysis — $0.03</div>
+                  <div>Meme virality & community — $0.03</div>
+                  <div>CEX-DEX spread — $0.01</div>
+                  <div>Full analysis (all 4) — $0.08</div>
+                </div>
+                <div className="text-gray-500 text-xs mt-2 italic">x402 micropayment via USDC on X Layer</div>
               </div>
             </div>
           </div>
@@ -335,7 +368,7 @@ export default function Dashboard() {
           </div>
 
           {/* Recent Calls */}
-          <h2 className="text-xl font-semibold text-white mb-4">Recent x402 Payments</h2>
+          <h2 className="text-xl font-semibold text-white mb-4">Recent API Calls</h2>
           <div className="card">
             {stats.recent_calls.length === 0 ? (
               <div className="text-center py-8">
@@ -356,7 +389,9 @@ export default function Dashboard() {
                         <span className="text-gray-300">{AGENT_ICONS[call.agent] || "🤖"} {call.agent}</span>
                         <span className="text-gray-500 font-mono text-xs bg-nexus-bg px-2 py-0.5 rounded">{call.service}</span>
                       </div>
-                      <span className="text-nexus-green font-mono">${call.price.toFixed(3)}</span>
+                      <span className={`font-mono ${call.price > 0 ? "text-nexus-green" : "text-gray-600"}`}>
+                        {call.price > 0 ? `$${call.price.toFixed(3)}` : "free"}
+                      </span>
                     </div>
                   ))}
               </div>
