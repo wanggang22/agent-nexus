@@ -23,15 +23,41 @@ const walletClient = createWalletClient({
 });
 
 /**
+ * Determine slippage: auto-detect based on price impact, capped by user's max.
+ * Similar to OKX Wallet DEX behavior: "auto" with user-defined max.
+ *
+ * @param priceImpact - Price impact from quote (percent)
+ * @param maxSlippage - User's max slippage tolerance (percent string), default "auto"
+ */
+function resolveSlippage(priceImpact: number, maxSlippage: string): number {
+  const MAX_ALLOWED = 49; // absolute hard cap
+
+  if (maxSlippage !== "auto") {
+    const userMax = parseFloat(maxSlippage);
+    if (!isNaN(userMax) && userMax > 0) return Math.min(userMax, MAX_ALLOWED);
+  }
+
+  // Auto mode: set slippage based on price impact
+  // Low impact tokens (stablecoins, majors): tight slippage
+  // High impact tokens (meme, low-liq): wider slippage
+  if (priceImpact < 0.5) return 0.5;   // stable pairs
+  if (priceImpact < 2) return 1;        // normal tokens
+  if (priceImpact < 5) return 3;        // volatile tokens
+  if (priceImpact < 10) return 5;       // meme coins
+  if (priceImpact < 20) return 10;      // low liquidity meme
+  return 15;                             // very low liquidity
+}
+
+/**
  * Get a swap quote from OKX DEX aggregator.
- * @param slippage - Slippage tolerance in percent, default "1" (1%)
+ * @param maxSlippage - Max slippage tolerance. "auto" (default) = auto-detect, or "5" for 5%
  */
 export async function getQuote(
   fromToken: string,
   toToken: string,
   amount: string,
   chain = "xlayer",
-  slippage = "1"
+  maxSlippage = "auto"
 ): Promise<TradeQuote> {
   const raw = runOnchainos(
     `swap quote --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain}`
@@ -42,8 +68,11 @@ export async function getQuote(
     if (parsed?.data || parsed) {
       const d = parsed.data?.[0] || parsed;
       const expectedOut = d.toTokenAmount || d.expectedOut || "0";
-      // Calculate minimum output based on slippage
-      const slippagePct = parseFloat(slippage) || 1;
+      const priceImpact = parseFloat(d.priceImpact || d.price_impact || "0");
+
+      // Auto-detect or use user's max
+      const slippagePct = resolveSlippage(priceImpact, maxSlippage);
+
       const minOut = BigInt(expectedOut) > 0n
         ? (BigInt(expectedOut) * BigInt(Math.round((100 - slippagePct) * 100)) / 10000n).toString()
         : "0";
@@ -56,8 +85,8 @@ export async function getQuote(
         amount_in: amount,
         expected_out: expectedOut,
         min_out: minOut,
-        price_impact: parseFloat(d.priceImpact || d.price_impact || "0"),
-        slippage: `${slippagePct}%`,
+        price_impact: priceImpact,
+        slippage: `${slippagePct}%${maxSlippage === "auto" ? " (auto)" : ""}`,
         route: d.routeSummary || d.route || JSON.stringify(d.dexRouterList || "direct"),
         expires_at: new Date(Date.now() + 60000).toISOString(),
       };
@@ -73,7 +102,7 @@ export async function getQuote(
     expected_out: "0",
     min_out: "0",
     price_impact: 0,
-    slippage: `${slippage}%`,
+    slippage: "auto",
     route: "unavailable",
     expires_at: new Date(Date.now() + 60000).toISOString(),
   };
@@ -84,18 +113,22 @@ export async function getQuote(
  * OKX aggregator handles: optimal routing, pool selection, slippage protection.
  * We add: pre-trade simulation, gas estimation, tx receipt tracking.
  *
- * @param slippage - Slippage tolerance in percent, default "1" (1%)
+ * @param maxSlippage - Max slippage. "auto" = auto-detect, or "5" for 5%
  */
 export async function executeTrade(
   fromToken: string,
   toToken: string,
   amount: string,
   chain = "xlayer",
-  slippage = "1"
+  maxSlippage = "auto"
 ) {
+  // First get a quote to determine price impact for auto slippage
+  const quote = await getQuote(fromToken, toToken, amount, chain, maxSlippage);
+  const slippageNum = parseFloat(quote.slippage) || 1;
+
   // OKX DEX aggregator builds the swap tx with slippage protection
   const swapRaw = runOnchainos(
-    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${account.address} --slippage ${slippage}`
+    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${account.address} --slippage ${slippageNum}`
   );
 
   if (!swapRaw) {
@@ -153,7 +186,7 @@ export async function executeTrade(
       tx_hash: txHash,
       order_id: orderId,
       chain,
-      slippage: `${slippage}%`,
+      slippage: quote.slippage,
       gas_estimate: gasEstimate?.toString(),
       explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
     };
