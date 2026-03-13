@@ -274,6 +274,51 @@ app.post("/chat", async (req, res) => {
   }
 });
 
+// ── Reverse proxy: all agent routes through Gateway ──
+// Maps path prefix → backend agent endpoint
+const ROUTE_MAP: Array<{ prefix: string; target: string }> = [
+  { prefix: "/signals", target: "http://localhost:4001" },
+  { prefix: "/analysis", target: "http://localhost:4002" },
+  { prefix: "/ai-stats", target: "http://localhost:4002" },
+  { prefix: "/risk", target: "http://localhost:4003" },
+  { prefix: "/trade", target: "http://localhost:4004" },
+];
+
+app.use((req, res, next) => {
+  const route = ROUTE_MAP.find((r) => req.path.startsWith(r.prefix));
+  if (!route) return next();
+
+  // Forward request to the target agent
+  const targetUrl = `${route.target}${req.originalUrl}`;
+  const opts: RequestInit = {
+    method: req.method,
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(30000),
+  };
+  if (req.method !== "GET" && req.method !== "HEAD" && req.body && Object.keys(req.body).length > 0) {
+    opts.body = JSON.stringify(req.body);
+  }
+
+  // Forward x402 payment headers
+  const paymentHeader = req.headers["x-payment-signature"] || req.headers["payment-signature"];
+  if (paymentHeader) {
+    (opts.headers as Record<string, string>)["X-PAYMENT-SIGNATURE"] = paymentHeader as string;
+  }
+
+  fetch(targetUrl, opts)
+    .then(async (agentRes) => {
+      // Forward response headers from agent
+      const paymentResponse = agentRes.headers.get("payment-response") || agentRes.headers.get("x-payment");
+      if (paymentResponse) res.setHeader("X-PAYMENT", paymentResponse);
+
+      const data = await agentRes.json();
+      res.status(agentRes.status).json(data);
+    })
+    .catch((e: any) => {
+      res.status(502).json({ error: `Agent unavailable: ${e.message}`, target: route.target });
+    });
+});
+
 // Stats
 let totalCalls = 0;
 let totalRevenue = 0;
