@@ -32,6 +32,12 @@ if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
   PIDS="$PIDS $!"
 fi
 
+# Start Twitter Bot (if credentials are set)
+if [ -n "$TWITTER_APP_KEY" ]; then
+  npx tsx packages/twitter-bot/src/bot.ts &
+  PIDS="$PIDS $!"
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║       All services started               ║"
@@ -46,6 +52,11 @@ if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
 echo "║  Telegram Bot: running                    ║"
 else
 echo "║  Telegram Bot: set TELEGRAM_BOT_TOKEN     ║"
+fi
+if [ -n "$TWITTER_APP_KEY" ]; then
+echo "║  Twitter Bot:  running                    ║"
+else
+echo "║  Twitter Bot:  set TWITTER_APP_KEY        ║"
 fi
 echo "╠══════════════════════════════════════════╣"
 echo "║  Chat:  POST http://localhost:4000/chat   ║"
