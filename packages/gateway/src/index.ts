@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import Anthropic from "@anthropic-ai/sdk";
+import { env, resolveToken, registerToken } from "shared";
 
 const AGENT = "Gateway";
 const app = express();
@@ -95,6 +97,183 @@ app.get("/health", async (_req, res) => {
   res.json({ gateway: "online", agents_online: `${online}/${statuses.length}`, agents: statuses });
 });
 
+// ── Natural language chat → auto-route to agents ──
+const INTENT_PROMPT = `You are the AgentNexus router. Given a user message, determine which agent service(s) to call.
+
+Available services:
+SIGNAL (free):
+- GET /signals/smart-money — smart money buy signals
+- GET /signals/whale-alert — whale movement alerts
+- GET /signals/meme-scan — new meme token scan
+- GET /signals/trending — trending tokens
+
+ANALYST (AI, paid):
+- GET /analysis/technical/{token} — technical analysis
+- GET /analysis/fundamental/{token} — fundamental analysis
+- GET /analysis/spread/{token} — CEX-DEX spread
+- GET /analysis/meme/{token} — meme virality analysis
+- GET /analysis/full/{token} — full analysis (all dimensions)
+
+RISK (free):
+- POST /risk/assess (body: {token, chain}) — pre-trade risk
+- GET /risk/token-safety/{token} — token safety check
+- GET /risk/portfolio?wallet={wallet} — portfolio risk
+
+TRADER (free):
+- POST /trade/quote (body: {from_token, to_token, amount}) — get quote
+- POST /trade/execute (body: {from_token, to_token, amount}) — execute trade
+
+Rules:
+- Extract token symbols (ETH, OKB, USDT...) or addresses (0x...) from the message.
+- Use the symbol or address as-is in {token} — the system will resolve symbols to addresses automatically.
+- For trade body fields (from_token, to_token), also use symbol or address as-is.
+- For "safe?", "rug?", "honeypot?" → risk/token-safety
+- For "analyze", "technical", "fundamental" → analyst
+- For "meme", "virality", "community" → analyst/meme
+- For "full analysis", "全面分析" → analyst/full
+- For "smart money", "聪明钱", "whale", "鲸鱼" → signals/smart-money or whale-alert
+- For "trending", "热门" → signals/trending
+- For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
+- For "portfolio risk", "持仓风险" → risk/portfolio
+- Default chain: xlayer.
+- Max 3 calls. If user wants comprehensive view, combine risk + analyst.
+
+Return ONLY valid JSON:
+{"calls":[{"agent":"signal"|"analyst"|"risk"|"trader","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
+
+const AGENT_ENDPOINTS: Record<string, string> = {
+  signal: "http://localhost:4001",
+  analyst: "http://localhost:4002",
+  risk: "http://localhost:4003",
+  trader: "http://localhost:4004",
+};
+
+app.post("/chat", async (req, res) => {
+  const { message, chain } = req.body;
+  const targetChain = chain || "xlayer";
+
+  if (!message || typeof message !== "string") {
+    return res.status(400).json({ error: "message (string) required" });
+  }
+
+  if (!env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: "AI not configured — set ANTHROPIC_API_KEY" });
+  }
+
+  try {
+    // Step 1: Parse intent with Claude
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    const intentMsg = await client.messages.create({
+      model: "claude-sonnet-4-5-20250514",
+      max_tokens: 300,
+      messages: [{ role: "user", content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY JSON.` }],
+    });
+
+    const intentText = intentMsg.content[0].type === "text" ? intentMsg.content[0].text : "{}";
+    const jsonMatch = intentText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(400).json({ error: "Could not understand your request", raw: intentText });
+    }
+
+    const intent = JSON.parse(jsonMatch[0]);
+    const calls: Array<{ agent: string; method: string; path: string; tokens?: string[]; body?: any; description: string }> = intent.calls || [];
+
+    if (calls.length === 0) {
+      return res.json({ reply: intent.reply || "I'm not sure what you'd like to do. Try asking about a token or signal.", results: [] });
+    }
+
+    // Step 2: Resolve token symbols → addresses
+    const resolvedTokens: Record<string, string> = {};
+    for (const call of calls) {
+      for (const token of call.tokens || []) {
+        if (resolvedTokens[token]) continue;
+        const resolved = resolveToken(token, targetChain);
+        if (resolved) {
+          resolvedTokens[token] = resolved.address;
+          // Cache symbol → address for future use
+          if (resolved.source !== "direct" && !/^0x/i.test(token)) {
+            registerToken(token, resolved.address, targetChain);
+          }
+        }
+      }
+    }
+
+    // Step 3: Build URLs and execute agent calls in parallel
+    const results = await Promise.all(
+      calls.slice(0, 3).map(async (call) => {
+        try {
+          const baseUrl = AGENT_ENDPOINTS[call.agent];
+          if (!baseUrl) return { service: call.description, status: 404, error: `Unknown agent: ${call.agent}` };
+
+          // Replace {token} in path with resolved address
+          let path = call.path;
+          for (const token of call.tokens || []) {
+            const address = resolvedTokens[token];
+            if (address) {
+              path = path.replace(`{${token}}`, address).replace(/{token}/gi, address);
+            } else {
+              // Token not resolved — use raw value as fallback
+              path = path.replace(/{token}/gi, token);
+            }
+          }
+
+          // Also resolve tokens in POST body
+          let body = call.body;
+          if (body && typeof body === "object") {
+            body = { ...body };
+            for (const [k, v] of Object.entries(body)) {
+              if (typeof v === "string" && resolvedTokens[v]) {
+                (body as any)[k] = resolvedTokens[v];
+              }
+            }
+          }
+
+          const url = `${baseUrl}${path}`;
+          const opts: RequestInit = {
+            method: call.method,
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(15000),
+          };
+          if (call.method === "POST" && body) {
+            opts.body = JSON.stringify(body);
+          }
+          const resp = await fetch(url, opts);
+          const data = await resp.json();
+          return { service: call.description, status: resp.status, data };
+        } catch (e: any) {
+          return { service: call.description, status: 500, error: e.message };
+        }
+      })
+    );
+
+    // Step 4: Summarize results with Claude
+    const tokenInfo = Object.keys(resolvedTokens).length > 0
+      ? `\nResolved tokens: ${Object.entries(resolvedTokens).map(([s, a]) => `${s} → ${a}`).join(", ")}`
+      : "";
+
+    const summaryMsg = await client.messages.create({
+      model: "claude-sonnet-4-5-20250514",
+      max_tokens: 400,
+      messages: [{
+        role: "user",
+        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary in the user's language (Chinese if they wrote Chinese, English otherwise). Focus on actionable insights. Keep it under 200 words.`,
+      }],
+    });
+
+    const summary = summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "";
+
+    res.json({
+      reply: summary,
+      intent: intent.reply,
+      tokens_resolved: resolvedTokens,
+      calls_made: calls.map((c) => c.description),
+      results,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Stats
 let totalCalls = 0;
 let totalRevenue = 0;
@@ -125,6 +304,7 @@ app.get("/stats", (_req, res) => {
 const PORT = 4000;
 const server = app.listen(PORT, () => {
   console.log(`\n🌐 AgentNexus Gateway running on http://localhost:${PORT}`);
+  console.log(`💬 Natural language: POST http://localhost:${PORT}/chat`);
   console.log(`📋 Service discovery: http://localhost:${PORT}/services`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
   console.log(`📊 Stats: http://localhost:${PORT}/stats\n`);
