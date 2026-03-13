@@ -1,0 +1,19 @@
+{
+  "name": "agent-nexus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Agent Service Marketplace on X Layer — pay-per-call via x402",
+  "scripts": {
+    "dev:gateway": "pnpm --filter gateway dev",
+    "dev:signal": "pnpm --filter signal-agent dev",
+    "dev:analyst": "pnpm --filter analyst-agent dev",
+    "dev:risk": "pnpm --filter risk-agent dev",
+    "dev:trader": "pnpm --filter trader-agent dev",
+    "dev:all": "pnpm -r dev",
+    "build": "pnpm -r build",
+    "deploy:contracts": "pnpm --filter contracts deploy"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "keccak", "secp256k1"]
+  }
+}
