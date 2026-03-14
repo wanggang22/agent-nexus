@@ -11,7 +11,7 @@ if (!TELEGRAM_TOKEN) {
 }
 
 const GATEWAY_URL = env.GATEWAY_URL;
-const SESSION_TTL = 15 * 60 * 1000; // 15 minutes
+const SESSION_TTL = 60 * 60 * 1000; // 1 hour
 const bot = new Bot(TELEGRAM_TOKEN);
 
 // Track users waiting for password input
@@ -111,7 +111,7 @@ bot.command("start", async (ctx) => {
       '• "帮我用1 OKB换USDT"\n' +
       '• "聪明钱在买什么"\n\n' +
       "/wallet — Your address\n" +
-      "/unlock — Unlock wallet (15 min session)\n" +
+      "/unlock — Unlock wallet (1 hour session)\n" +
       "/lock — Lock wallet immediately\n" +
       "/export — Export private key\n" +
       "/services — All services",
@@ -152,7 +152,7 @@ bot.command("wallet", async (ctx) => {
   );
 });
 
-// /unlock — unlock wallet for 15 minutes
+// /unlock — unlock wallet for 1 hourutes
 bot.command("unlock", async (ctx) => {
   if (ctx.chat?.type !== "private") {
     await ctx.reply("⚠️ /unlock only works in private chat.");
@@ -167,12 +167,12 @@ bot.command("unlock", async (ctx) => {
   }
 
   if (getSession(userId)) {
-    await ctx.reply("🔓 Already unlocked. Session refreshed (15 min).");
+    await ctx.reply("🔓 Already unlocked. Session refreshed (1 hour).");
     return;
   }
 
   waitingFor.set(userId, { state: "confirm_trade" });
-  await ctx.reply("🔐 Enter your trading password to unlock (15 min session):");
+  await ctx.reply("🔐 Enter your trading password to unlock (1 hour session):");
 });
 
 // /lock — immediately lock wallet
@@ -287,7 +287,7 @@ bot.on("message:text", async (ctx) => {
         return;
       }
       setSession(userId, unlocked.privateKey, unlocked.address);
-      await ctx.reply("🔓 Wallet unlocked for 15 minutes. You can now trade without entering password.\n\nUse /lock to lock immediately.");
+      await ctx.reply("🔓 Wallet unlocked for 1 hourutes. You can now trade without entering password.\n\nUse /lock to lock immediately.");
       return;
     }
 
