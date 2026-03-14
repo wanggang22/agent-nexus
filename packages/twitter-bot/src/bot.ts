@@ -1,5 +1,5 @@
 import { TwitterApi } from "twitter-api-v2";
-import { env } from "shared";
+import { env, verifyBindCode, getLinkedWallet } from "shared";
 
 // ── Config ──
 const TWITTER_APP_KEY = process.env.TWITTER_APP_KEY || "";
@@ -150,10 +150,39 @@ async function pollMentions() {
 
       console.log(`[TwitterBot] Processing: "${message.slice(0, 50)}..." (tweet ${tweet.id})`);
 
-      // Get response from AgentNexus
+      // Handle verify command — bind Twitter to Telegram wallet
+      const verifyMatch = message.match(/^verify\s+([A-Z0-9]{6})$/i);
+      if (verifyMatch) {
+        const result = verifyBindCode(verifyMatch[1], tweet.author_id!);
+        if (result.success) {
+          await replyToTweet(tweet.id, `✅ Wallet linked! Your address: ${result.address}\n\nYou can now use @${myUsername} for analysis. Trading requires Telegram (unlock session).`);
+        } else {
+          await replyToTweet(tweet.id, `❌ ${result.error}. Get a new code via Telegram /bindtwitter`);
+        }
+        repliedTweets.add(tweet.id);
+        lastMentionId = tweet.id;
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      // Check if message is a trade request
+      const isTradeRequest = /swap|buy|sell|trade|换|买|卖/i.test(message);
+      if (isTradeRequest) {
+        const wallet = getLinkedWallet(tweet.author_id!);
+        if (!wallet) {
+          await replyToTweet(tweet.id, `To trade, first:\n1. Create wallet in Telegram @AgentNexusBot\n2. /bindtwitter to link your Twitter\n3. /unlock to start trading`);
+        } else {
+          await replyToTweet(tweet.id, `Trading via Twitter is coming soon! For now, use Telegram to execute trades (your wallet: ${wallet.slice(0, 6)}...${wallet.slice(-4)})`);
+        }
+        repliedTweets.add(tweet.id);
+        lastMentionId = tweet.id;
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      // Regular analysis/signals — free, no wallet needed
       const response = await askAgentNexus(message, tweet.author_id);
 
-      // Reply
       await replyToTweet(tweet.id, response);
 
       // Track

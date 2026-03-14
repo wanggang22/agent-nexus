@@ -2,6 +2,7 @@ import { Bot } from "grammy";
 import {
   env, createWallet, confirmWallet, unlockWallet,
   getWalletAddress, isWalletReady, isWalletPending,
+  generateBindCode,
 } from "shared";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -200,6 +201,31 @@ bot.command("export", async (ctx) => {
 
   waitingFor.set(userId, { state: "export" });
   await ctx.reply("🔐 Enter your trading password to export your private key:");
+});
+
+// /bindtwitter — link Twitter account to this wallet
+bot.command("bindtwitter", async (ctx) => {
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("⚠️ /bindtwitter only works in private chat.");
+    return;
+  }
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  if (!isWalletReady("telegram", userId)) {
+    await ctx.reply("No wallet. Use /start first.");
+    return;
+  }
+
+  const code = generateBindCode(userId);
+  await ctx.reply(
+    `🐦 *Bind Twitter Account*\n\n` +
+    `Tweet or reply to @AgentNexus with:\n\n` +
+    `\`@AgentNexus verify ${code}\`\n\n` +
+    `⏰ Code expires in 5 minutes\n` +
+    `✅ One-time use — code is deleted after binding`,
+    { parse_mode: "Markdown" }
+  );
 });
 
 // /services
