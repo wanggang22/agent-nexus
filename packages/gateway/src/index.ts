@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
-import { env, resolveToken, registerToken, getOrCreateWallet, getWalletStats, xlayer } from "shared";
+import { env, resolveToken, registerToken, createWallet, getWalletAddress as getWalletAddr, getWalletStats, xlayer } from "shared";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -179,53 +179,44 @@ const AGENT_ENDPOINTS: Record<string, string> = {
   trader: TRADER_URL,
 };
 
-// User wallet info
+// User wallet address (no private key ever returned from Gateway)
 app.get("/wallet/:platform/:userId", (req, res) => {
   const { platform, userId } = req.params;
   if (!["telegram", "twitter", "api"].includes(platform)) {
     return res.status(400).json({ error: "platform must be telegram, twitter, or api" });
   }
-  const wallet = getOrCreateWallet(platform as any, userId);
-  // Only include private_key if explicitly requested (for export)
-  const includeKey = req.query.export === "true";
+  const address = getWalletAddr(platform as any, userId);
   res.json({
-    address: wallet.address,
-    is_new: wallet.isNew,
+    address: address || null,
     platform,
     user_id: userId,
-    ...(includeKey ? { private_key: wallet.privateKey } : {}),
-    deposit_info: wallet.isNew
-      ? `Wallet created! Deposit OKB or tokens to ${wallet.address} to start trading on X Layer.`
-      : undefined,
   });
 });
 
-// Sign and send trade — private key never leaves Gateway
-app.post("/trade/user-execute", async (req, res) => {
-  const { from_token, to_token, amount, chain, slippage, platform, user_id } = req.body;
-  if (!from_token || !to_token || !amount || !platform || !user_id) {
-    return res.status(400).json({ error: "from_token, to_token, amount, platform, user_id required" });
+// Sign and send trade — called by Bot only, private key passed in-memory from bot process
+// In production, this should be replaced by signing inside the bot itself
+app.post("/trade/sign-and-send", async (req, res) => {
+  const { from_token, to_token, amount, chain, slippage, wallet_address, private_key } = req.body;
+  if (!from_token || !to_token || !amount || !wallet_address || !private_key) {
+    return res.status(400).json({ error: "from_token, to_token, amount, wallet_address, private_key required" });
   }
 
-  // Get user wallet — private key stays here
-  const wallet = getOrCreateWallet(platform, user_id);
-
   try {
-    // Step 1: Ask Trader Agent to BUILD unsigned tx (no private key sent)
+    // Step 1: Ask Trader Agent to BUILD unsigned tx (no private key sent to Trader)
     const buildResp = await fetch(`${TRADER_URL}/trade/build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ from_token, to_token, amount, wallet_address: wallet.address, chain, slippage }),
+      body: JSON.stringify({ from_token, to_token, amount, wallet_address, chain, slippage }),
       signal: AbortSignal.timeout(15000),
     });
     const buildResult = await buildResp.json() as any;
 
     if (!buildResult.success || !buildResult.tx) {
-      return res.json({ success: false, error: buildResult.error || "Failed to build transaction", wallet: wallet.address });
+      return res.json({ success: false, error: buildResult.error || "Failed to build transaction", wallet: wallet_address });
     }
 
-    // Step 2: Sign and send locally — private key never leaves this process
-    const userAccount = privateKeyToAccount(wallet.privateKey as `0x${string}`);
+    // Step 2: Sign and send — key used only here, then discarded
+    const userAccount = privateKeyToAccount(private_key as `0x${string}`);
     const userWalletClient = createWalletClient({
       account: userAccount,
       chain: xlayer,
@@ -243,13 +234,13 @@ app.post("/trade/user-execute", async (req, res) => {
     res.json({
       success: true,
       tx_hash: txHash,
-      wallet: wallet.address,
+      wallet: wallet_address,
       chain: chain || "xlayer",
       slippage: buildResult.quote?.slippage,
       explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
     });
   } catch (e: any) {
-    res.json({ success: false, error: e.message, wallet: wallet.address });
+    res.json({ success: false, error: e.message, wallet: wallet_address });
   }
 });
 
@@ -291,10 +282,10 @@ app.post("/chat", async (req, res) => {
       return res.json({ reply: intent.reply || "I'm not sure what you'd like to do. Try asking about a token or signal.", results: [] });
     }
 
-    // Step 2: Get user wallet if platform/user_id provided
-    let userWallet: { address: string; privateKey: string; isNew: boolean } | null = null;
+    // Step 2: Get user wallet address (no private key access here)
+    let userWalletAddress: string | null = null;
     if (platform && user_id) {
-      userWallet = getOrCreateWallet(platform, user_id);
+      userWalletAddress = getWalletAddr(platform, user_id);
     }
 
     // Step 3: Resolve token symbols → addresses
@@ -343,21 +334,18 @@ app.post("/chat", async (req, res) => {
             }
           }
 
-          // For trade execution with user wallet: use Gateway's local signing
-          if (userWallet && call.agent === "trader" && path.includes("/execute")) {
-            // Redirect to Gateway's own /trade/user-execute (signs locally, key never leaves)
-            const execResp = await fetch(`http://localhost:${PORT}/trade/user-execute`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...body,
-                platform,
-                user_id,
-              }),
-              signal: AbortSignal.timeout(20000),
-            });
-            const execData = await execResp.json();
-            return { service: call.description, status: execResp.status, data: execData };
+          // Trade execution requires password — return preview instead
+          if (userWalletAddress && call.agent === "trader" && path.includes("/execute")) {
+            return {
+              service: call.description,
+              status: 200,
+              data: {
+                needs_confirmation: true,
+                summary: `Swap ${(body as any)?.amount || "?"} ${(body as any)?.from_token || "?"} → ${(body as any)?.to_token || "?"}`,
+                trade_params: body,
+                wallet: userWalletAddress,
+              },
+            };
           }
 
           const url = `${baseUrl}${path}`;
