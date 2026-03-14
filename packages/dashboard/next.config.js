@@ -15,7 +15,7 @@ const nextConfig = {
     TWITTER_CLIENT_SECRET: process.env.TWITTER_CLIENT_SECRET,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    NEXT_PUBLIC_GATEWAY_URL: process.env.GATEWAY_URL || "http://localhost:4000",
+    NEXT_PUBLIC_GATEWAY_URL: process.env.NEXT_PUBLIC_GATEWAY_URL || process.env.GATEWAY_URL || "http://localhost:4000",
   },
 };
 
