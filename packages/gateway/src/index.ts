@@ -24,7 +24,7 @@ app.use(cors());
 app.use(express.json());
 
 // ── Shared session store: unlocked wallets with TTL ──
-const SESSION_TTL = 60 * 60 * 1000; // 1 hour
+const SESSION_TTL = 365 * 24 * 60 * 60 * 1000; // permanent (until /lock or server restart)
 const sessions = new Map<string, { privateKey: string; address: string; expiry: number }>();
 
 function getSession(sessionKey: string): { privateKey: string; address: string } | null {
@@ -49,7 +49,7 @@ app.post("/session/unlock", (req, res) => {
   }
   const key = `${platform}_${user_id}`;
   sessions.set(key, { privateKey: private_key, address, expiry: Date.now() + SESSION_TTL });
-  res.json({ success: true, expires_in: "1 hour" });
+  res.json({ success: true, expires_in: "permanent (until /lock)" });
 });
 
 app.post("/session/lock", (req, res) => {
@@ -264,7 +264,7 @@ app.post("/wallet/unlock", (req, res) => {
   // Store in session
   const key = `${platform}_${user_id}`;
   sessions.set(key, { privateKey: unlocked.privateKey, address: unlocked.address, expiry: Date.now() + SESSION_TTL });
-  res.json({ success: true, address: unlocked.address, expires_in: "1 hour" });
+  res.json({ success: true, address: unlocked.address, expires_in: "permanent (until /lock)" });
 });
 
 // Generate bind code (for linking any platform ↔ any platform)
