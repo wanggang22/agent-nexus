@@ -4,22 +4,20 @@ import TwitterProvider from "next-auth/providers/twitter";
 const handler = NextAuth({
   providers: [
     TwitterProvider({
-      clientId: process.env.TWITTER_CLIENT_ID || "",
-      clientSecret: process.env.TWITTER_CLIENT_SECRET || "",
-      version: "2.0",
+      clientId: process.env.TWITTER_APP_KEY || "",
+      clientSecret: process.env.TWITTER_APP_SECRET || "",
+      // OAuth 1.0a — works with http://localhost
     }),
   ],
   callbacks: {
     async jwt({ token, account, profile }) {
-      // Store Twitter user ID in the JWT token
       if (account && profile) {
-        token.twitterId = (profile as any).data?.id || (profile as any).id || account.providerAccountId;
-        token.twitterUsername = (profile as any).data?.username || (profile as any).username;
+        token.twitterId = (profile as any).id_str || (profile as any).id || account.providerAccountId;
+        token.twitterUsername = (profile as any).screen_name || (profile as any).username;
       }
       return token;
     },
     async session({ session, token }) {
-      // Expose Twitter ID to client
       (session as any).twitterId = token.twitterId;
       (session as any).twitterUsername = token.twitterUsername;
       return session;
