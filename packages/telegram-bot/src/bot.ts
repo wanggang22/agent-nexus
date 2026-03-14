@@ -12,7 +12,6 @@ if (!TELEGRAM_TOKEN) {
 }
 
 const GATEWAY_URL = env.GATEWAY_URL;
-const SESSION_TTL = 60 * 60 * 1000; // 1 hour
 const bot = new Bot(TELEGRAM_TOKEN);
 
 // Track users waiting for password input
@@ -21,53 +20,44 @@ const waitingFor = new Map<string, {
   tradeData?: any;
 }>();
 
-// Unlocked sessions — decrypted key in memory with expiry
-const sessions = new Map<string, {
-  privateKey: string;
-  address: string;
-  expiry: number;
-}>();
-
-function getSession(userId: string): { privateKey: string; address: string } | null {
-  const s = sessions.get(userId);
-  if (!s) return null;
-  if (Date.now() > s.expiry) {
-    sessions.delete(userId);
-    return null;
-  }
-  // Refresh TTL on each use
-  s.expiry = Date.now() + SESSION_TTL;
-  return { privateKey: s.privateKey, address: s.address };
+// Session helpers — shared via Gateway
+async function setSession(userId: string, privateKey: string, address: string) {
+  await fetch(`${GATEWAY_URL}/session/unlock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform: "telegram", user_id: userId, private_key: privateKey, address }),
+  }).catch(() => {});
 }
 
-function setSession(userId: string, privateKey: string, address: string) {
-  sessions.set(userId, { privateKey, address, expiry: Date.now() + SESSION_TTL });
+async function clearSession(userId: string) {
+  await fetch(`${GATEWAY_URL}/session/lock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform: "telegram", user_id: userId }),
+  }).catch(() => {});
 }
 
-function clearSession(userId: string) {
-  sessions.delete(userId);
+async function checkSession(userId: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${GATEWAY_URL}/session/check/telegram/${userId}`, { signal: AbortSignal.timeout(3000) });
+    const data = await resp.json() as any;
+    return !!data.active;
+  } catch { return false; }
 }
-
-// Auto-cleanup expired sessions every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of sessions) {
-    if (now > v.expiry) sessions.delete(k);
-  }
-}, 5 * 60 * 1000);
 
 // ── Trade execution helper ──
-async function executeTradeFn(ctx: any, tradeData: any, session: { privateKey: string; address: string }) {
+async function executeTradeFn(ctx: any, tradeData: any, userId: string) {
   await ctx.replyWithChatAction("typing");
   try {
     const { from_token, to_token, amount, chain, slippage } = tradeData;
+    // Use Gateway session — no private key passed, Gateway looks it up
     const resp = await fetch(`${GATEWAY_URL}/trade/sign-and-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         from_token, to_token, amount, chain, slippage,
-        wallet_address: session.address,
-        private_key: session.privateKey,
+        platform: "telegram",
+        user_id: userId,
       }),
       signal: AbortSignal.timeout(30000),
     });
@@ -167,7 +157,7 @@ bot.command("unlock", async (ctx) => {
     return;
   }
 
-  if (getSession(userId)) {
+  if (await checkSession(userId)) {
     await ctx.reply("🔓 Already unlocked. Session refreshed (1 hour).");
     return;
   }
@@ -180,7 +170,7 @@ bot.command("unlock", async (ctx) => {
 bot.command("lock", async (ctx) => {
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
-  clearSession(userId);
+  await clearSession(userId);
   await ctx.reply("🔒 Wallet locked. Use /unlock to unlock again.");
 });
 
@@ -312,24 +302,22 @@ bot.on("message:text", async (ctx) => {
         await ctx.reply("❌ Wrong password.");
         return;
       }
-      setSession(userId, unlocked.privateKey, unlocked.address);
-      await ctx.reply("🔓 Wallet unlocked for 1 hourutes. You can now trade without entering password.\n\nUse /lock to lock immediately.");
+      await setSession(userId, unlocked.privateKey, unlocked.address);
+      await ctx.reply("🔓 Wallet unlocked for 1 hour. Trade on Telegram or Twitter without password.\n\nUse /lock to lock immediately.");
       return;
     }
 
     // Has trade data — unlock + execute
-    let session = getSession(userId);
-    if (!session) {
+    if (!(await checkSession(userId))) {
       const unlocked = unlockWallet("telegram", userId, text);
       if (!unlocked) {
         await ctx.reply("❌ Wrong password. Trade cancelled.");
         return;
       }
-      setSession(userId, unlocked.privateKey, unlocked.address);
-      session = { privateKey: unlocked.privateKey, address: unlocked.address };
+      await setSession(userId, unlocked.privateKey, unlocked.address);
     }
 
-    await executeTradeFn(ctx, waiting.tradeData, session);
+    await executeTradeFn(ctx, waiting.tradeData, userId);
     return;
   }
 
@@ -400,11 +388,11 @@ bot.on("message:text", async (ctx) => {
     );
 
     if (hasTradeCall && tradeResult?.data?.needs_confirmation) {
-      const session = getSession(userId);
+      const sessionActive = await checkSession(userId);
 
-      if (session) {
+      if (sessionActive) {
         // Session active — execute immediately, no password needed
-        await executeTradeFn(ctx, tradeResult.data.trade_params, session);
+        await executeTradeFn(ctx, tradeResult.data.trade_params, userId);
         return;
       }
 

@@ -18,6 +18,47 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ── Shared session store: unlocked wallets with TTL ──
+const SESSION_TTL = 60 * 60 * 1000; // 1 hour
+const sessions = new Map<string, { privateKey: string; address: string; expiry: number }>();
+
+function getSession(sessionKey: string): { privateKey: string; address: string } | null {
+  const s = sessions.get(sessionKey);
+  if (!s) return null;
+  if (Date.now() > s.expiry) { sessions.delete(sessionKey); return null; }
+  s.expiry = Date.now() + SESSION_TTL; // refresh on use
+  return { privateKey: s.privateKey, address: s.address };
+}
+
+// Auto-cleanup expired sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessions) { if (now > v.expiry) sessions.delete(k); }
+}, 5 * 60 * 1000);
+
+// Session API — called by Telegram/Twitter bots
+app.post("/session/unlock", (req, res) => {
+  const { platform, user_id, private_key, address } = req.body;
+  if (!platform || !user_id || !private_key || !address) {
+    return res.status(400).json({ error: "platform, user_id, private_key, address required" });
+  }
+  const key = `${platform}_${user_id}`;
+  sessions.set(key, { privateKey: private_key, address, expiry: Date.now() + SESSION_TTL });
+  res.json({ success: true, expires_in: "1 hour" });
+});
+
+app.post("/session/lock", (req, res) => {
+  const { platform, user_id } = req.body;
+  if (!platform || !user_id) return res.status(400).json({ error: "platform, user_id required" });
+  sessions.delete(`${platform}_${user_id}`);
+  res.json({ success: true });
+});
+
+app.get("/session/check/:platform/:userId", (req, res) => {
+  const s = getSession(`${req.params.platform}_${req.params.userId}`);
+  res.json({ active: !!s, address: s?.address || null });
+});
+
 // Request logger (skip /health and /stats/record to reduce noise)
 app.use((req, res, next) => {
   const start = Date.now();
@@ -196,9 +237,18 @@ app.get("/wallet/:platform/:userId", (req, res) => {
 // Sign and send trade — called by Bot only, private key passed in-memory from bot process
 // In production, this should be replaced by signing inside the bot itself
 app.post("/trade/sign-and-send", async (req, res) => {
-  const { from_token, to_token, amount, chain, slippage, wallet_address, private_key } = req.body;
-  if (!from_token || !to_token || !amount || !wallet_address || !private_key) {
-    return res.status(400).json({ error: "from_token, to_token, amount, wallet_address, private_key required" });
+  const { from_token, to_token, amount, chain, slippage, wallet_address, private_key, platform, user_id } = req.body;
+
+  // Get private key: explicitly provided OR from active session
+  let pk = private_key;
+  let wa = wallet_address;
+  if (!pk && platform && user_id) {
+    const session = getSession(`${platform}_${user_id}`);
+    if (session) { pk = session.privateKey; wa = session.address; }
+  }
+
+  if (!from_token || !to_token || !amount || !wa || !pk) {
+    return res.status(400).json({ error: "Missing trade params or no active session. Unlock wallet first." });
   }
 
   try {
@@ -206,17 +256,17 @@ app.post("/trade/sign-and-send", async (req, res) => {
     const buildResp = await fetch(`${TRADER_URL}/trade/build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ from_token, to_token, amount, wallet_address, chain, slippage }),
+      body: JSON.stringify({ from_token, to_token, amount, wallet_address: wa, chain, slippage }),
       signal: AbortSignal.timeout(15000),
     });
     const buildResult = await buildResp.json() as any;
 
     if (!buildResult.success || !buildResult.tx) {
-      return res.json({ success: false, error: buildResult.error || "Failed to build transaction", wallet: wallet_address });
+      return res.json({ success: false, error: buildResult.error || "Failed to build transaction", wallet: wa });
     }
 
     // Step 2: Sign and send — key used only here, then discarded
-    const userAccount = privateKeyToAccount(private_key as `0x${string}`);
+    const userAccount = privateKeyToAccount(pk as `0x${string}`);
     const userWalletClient = createWalletClient({
       account: userAccount,
       chain: xlayer,
@@ -234,13 +284,13 @@ app.post("/trade/sign-and-send", async (req, res) => {
     res.json({
       success: true,
       tx_hash: txHash,
-      wallet: wallet_address,
+      wallet: wa,
       chain: chain || "xlayer",
       slippage: buildResult.quote?.slippage,
       explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
     });
   } catch (e: any) {
-    res.json({ success: false, error: e.message, wallet: wallet_address });
+    res.json({ success: false, error: e.message, wallet: wa });
   }
 });
 

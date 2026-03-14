@@ -1,5 +1,5 @@
 import { TwitterApi } from "twitter-api-v2";
-import { env, verifyBindCode, getLinkedWallet } from "shared";
+import { env, verifyBindCode, getLinkedWallet, getLinkedTelegramId } from "shared";
 
 // ── Config ──
 const TWITTER_APP_KEY = process.env.TWITTER_APP_KEY || "";
@@ -170,9 +170,37 @@ async function pollMentions() {
       if (isTradeRequest) {
         const wallet = getLinkedWallet(tweet.author_id!);
         if (!wallet) {
-          await replyToTweet(tweet.id, `To trade, first:\n1. Create wallet in Telegram @AgentNexusBot\n2. /bindtwitter to link your Twitter\n3. /unlock to start trading`);
+          await replyToTweet(tweet.id, `To trade:\n1. Create wallet in Telegram @AgentNexusBot\n2. /bindtwitter to link\n3. /unlock to start`);
         } else {
-          await replyToTweet(tweet.id, `Trading via Twitter is coming soon! For now, use Telegram to execute trades (your wallet: ${wallet.slice(0, 6)}...${wallet.slice(-4)})`);
+          // Check if Telegram session is active
+          const telegramId = getLinkedTelegramId(tweet.author_id!);
+          let sessionActive = false;
+          if (telegramId) {
+            try {
+              const resp = await fetch(`${GATEWAY_URL}/session/check/telegram/${telegramId}`, { signal: AbortSignal.timeout(3000) });
+              const data = await resp.json() as any;
+              sessionActive = !!data.active;
+            } catch {}
+          }
+
+          if (sessionActive && telegramId) {
+            // Session active — execute trade via Gateway using shared session
+            try {
+              // Parse trade intent from message
+              const chatResp = await fetch(`${GATEWAY_URL}/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message, platform: "telegram", user_id: telegramId }),
+                signal: AbortSignal.timeout(30000),
+              });
+              const chatData = await chatResp.json() as any;
+              await replyToTweet(tweet.id, chatData.reply || "Trade processed. Check Telegram for details.");
+            } catch {
+              await replyToTweet(tweet.id, `Trade failed. Try again or use Telegram.`);
+            }
+          } else {
+            await replyToTweet(tweet.id, `Wallet linked (${wallet.slice(0, 6)}...${wallet.slice(-4)}) but session expired. /unlock in Telegram first, then tweet again.`);
+          }
         }
         repliedTweets.add(tweet.id);
         lastMentionId = tweet.id;
