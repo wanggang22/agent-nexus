@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "export",
-  basePath: "/agent-nexus",
+  // No more static export — need server-side for OAuth
   images: { unoptimized: true },
 };
 

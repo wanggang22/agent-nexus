@@ -1,7 +1,12 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
-import { env, resolveToken, registerToken, createWallet, getWalletAddress as getWalletAddr, getWalletStats, xlayer } from "shared";
+import {
+  env, resolveToken, registerToken, xlayer,
+  createWallet, confirmWallet, unlockWallet,
+  getWalletAddress as getWalletAddr, getWalletStats,
+  generateBindCode, verifyBindCode,
+} from "shared";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -220,18 +225,58 @@ const AGENT_ENDPOINTS: Record<string, string> = {
   trader: TRADER_URL,
 };
 
-// User wallet address (no private key ever returned from Gateway)
+// User wallet address — also creates if doesn't exist
 app.get("/wallet/:platform/:userId", (req, res) => {
   const { platform, userId } = req.params;
   if (!["telegram", "twitter", "api"].includes(platform)) {
     return res.status(400).json({ error: "platform must be telegram, twitter, or api" });
   }
-  const address = getWalletAddr(platform as any, userId);
+  // Create wallet if not exists
+  const wallet = createWallet(platform as any, userId);
   res.json({
-    address: address || null,
+    address: wallet.address,
+    is_new: wallet.isNew,
     platform,
     user_id: userId,
   });
+});
+
+// Confirm wallet with password (encrypt private key)
+app.post("/wallet/confirm", (req, res) => {
+  const { platform, user_id, password } = req.body;
+  if (!platform || !user_id || !password) {
+    return res.status(400).json({ error: "platform, user_id, password required" });
+  }
+  const result = confirmWallet(platform, user_id, password);
+  res.json(result);
+});
+
+// Unlock wallet → create session
+app.post("/wallet/unlock", (req, res) => {
+  const { platform, user_id, password } = req.body;
+  if (!platform || !user_id || !password) {
+    return res.status(400).json({ error: "platform, user_id, password required" });
+  }
+  const unlocked = unlockWallet(platform, user_id, password);
+  if (!unlocked) {
+    return res.json({ success: false, error: "Wrong password" });
+  }
+  // Store in session
+  const key = `${platform}_${user_id}`;
+  sessions.set(key, { privateKey: unlocked.privateKey, address: unlocked.address, expiry: Date.now() + SESSION_TTL });
+  res.json({ success: true, address: unlocked.address, expires_in: "1 hour" });
+});
+
+// Generate bind code (for linking Twitter ↔ Telegram)
+app.post("/bind/generate", (req, res) => {
+  const { platform, user_id } = req.body;
+  if (!platform || !user_id) {
+    return res.status(400).json({ error: "platform, user_id required" });
+  }
+  // For now, bind codes are generated from the Telegram side (in shared module)
+  // But from website, we generate with the Twitter user's ID context
+  const code = generateBindCode(user_id);
+  res.json({ code, expires_in: "5 minutes" });
 });
 
 // Sign and send trade — called by Bot only, private key passed in-memory from bot process

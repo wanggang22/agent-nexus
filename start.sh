@@ -38,6 +38,11 @@ if [ -n "$TWITTER_APP_KEY" ]; then
   PIDS="$PIDS $!"
 fi
 
+# Start Dashboard (Next.js)
+cd packages/dashboard && npx next dev -p 3000 &
+PIDS="$PIDS $!"
+cd ../..
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║       All services started               ║"
@@ -59,7 +64,8 @@ else
 echo "║  Twitter Bot:  set TWITTER_APP_KEY        ║"
 fi
 echo "╠══════════════════════════════════════════╣"
-echo "║  Chat:  POST http://localhost:4000/chat   ║"
+echo "║  Dashboard: http://localhost:3000           ║"
+echo "║  Chat API:  POST http://localhost:4000/chat║"
 echo "║  Demo:  npx tsx packages/demo-client/...  ║"
 echo "║  Press Ctrl+C to stop all                 ║"
 echo "╚══════════════════════════════════════════╝"
