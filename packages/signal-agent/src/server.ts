@@ -62,7 +62,7 @@ app.get("/signals/trending", async (req, res) => {
   }
 });
 
-const PORT = 4001;
+const PORT = parseInt(process.env.PORT || "4001");
 const server = app.listen(PORT, () => {
   console.log(`\n📡 ${AGENT} running on http://localhost:${PORT}`);
   console.log(`   Wallet: ${account.address}`);

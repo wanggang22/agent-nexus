@@ -4,6 +4,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { env, resolveToken, registerToken } from "shared";
 
 const AGENT = "Gateway";
+
+// Service URLs — configurable for Railway internal networking
+const SIGNAL_URL = process.env.SIGNAL_URL || "http://localhost:4001";
+const ANALYST_URL = process.env.ANALYST_URL || "http://localhost:4002";
+const RISK_URL = process.env.RISK_URL || "http://localhost:4003";
+const TRADER_URL = process.env.TRADER_URL || "http://localhost:4004";
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -22,7 +29,7 @@ const AGENTS = [
   {
     name: "Signal Agent",
     description: "Real-time on-chain signal detection via OnchainOS — FREE",
-    endpoint: "http://localhost:4001",
+    endpoint: SIGNAL_URL,
     services: [
       { method: "GET", route: "/signals/smart-money", price: "free", description: "Smart money buy signals" },
       { method: "GET", route: "/signals/whale-alert", price: "free", description: "Whale movement alerts" },
@@ -33,7 +40,7 @@ const AGENTS = [
   {
     name: "Analyst Agent — Basic (FREE)",
     description: "Rule-based analysis from OnchainOS data — no AI, instant results",
-    endpoint: "http://localhost:4002",
+    endpoint: ANALYST_URL,
     services: [
       { method: "GET", route: "/basic/technical/:token", price: "free", description: "Basic technical analysis (rule-based)" },
       { method: "GET", route: "/basic/fundamental/:token", price: "free", description: "Basic fundamental analysis (rule-based)" },
@@ -45,7 +52,7 @@ const AGENTS = [
   {
     name: "Analyst Agent — Deep (PAID)",
     description: "AI-powered deep analysis by Claude — cultural insight, predictions, recommendations",
-    endpoint: "http://localhost:4002",
+    endpoint: ANALYST_URL,
     services: [
       { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Deep technical analysis (AI)" },
       { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Deep fundamental analysis (AI)" },
@@ -57,7 +64,7 @@ const AGENTS = [
   {
     name: "Risk Agent",
     description: "Pre-trade risk assessment via OnchainOS — FREE",
-    endpoint: "http://localhost:4003",
+    endpoint: RISK_URL,
     services: [
       { method: "POST", route: "/risk/assess", price: "free", description: "Pre-trade risk assessment" },
       { method: "GET", route: "/risk/token-safety/:token", price: "free", description: "Token safety check" },
@@ -67,7 +74,7 @@ const AGENTS = [
   {
     name: "Trader Agent",
     description: "Trade execution via OnchainOS + OKX DEX aggregator — FREE",
-    endpoint: "http://localhost:4004",
+    endpoint: TRADER_URL,
     services: [
       { method: "POST", route: "/trade/quote", price: "free", description: "Get optimal trade quote" },
       { method: "POST", route: "/trade/execute", price: "free", description: "Execute trade" },
@@ -163,10 +170,10 @@ Return ONLY valid JSON:
 {"calls":[{"agent":"signal"|"analyst"|"risk"|"trader","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
 
 const AGENT_ENDPOINTS: Record<string, string> = {
-  signal: "http://localhost:4001",
-  analyst: "http://localhost:4002",
-  risk: "http://localhost:4003",
-  trader: "http://localhost:4004",
+  signal: SIGNAL_URL,
+  analyst: ANALYST_URL,
+  risk: RISK_URL,
+  trader: TRADER_URL,
 };
 
 app.post("/chat", async (req, res) => {
@@ -298,12 +305,12 @@ app.post("/chat", async (req, res) => {
 // ── Reverse proxy: all agent routes through Gateway ──
 // Maps path prefix → backend agent endpoint
 const ROUTE_MAP: Array<{ prefix: string; target: string }> = [
-  { prefix: "/signals", target: "http://localhost:4001" },
-  { prefix: "/basic", target: "http://localhost:4002" },
-  { prefix: "/analysis", target: "http://localhost:4002" },
-  { prefix: "/ai-stats", target: "http://localhost:4002" },
-  { prefix: "/risk", target: "http://localhost:4003" },
-  { prefix: "/trade", target: "http://localhost:4004" },
+  { prefix: "/signals", target: SIGNAL_URL },
+  { prefix: "/basic", target: ANALYST_URL },
+  { prefix: "/analysis", target: ANALYST_URL },
+  { prefix: "/ai-stats", target: ANALYST_URL },
+  { prefix: "/risk", target: RISK_URL },
+  { prefix: "/trade", target: TRADER_URL },
 ];
 
 app.use((req, res, next) => {
@@ -368,7 +375,7 @@ app.get("/stats", (_req, res) => {
   });
 });
 
-const PORT = 4000;
+const PORT = parseInt(process.env.PORT || "4000");
 const server = app.listen(PORT, () => {
   console.log(`\n🌐 AgentNexus Gateway running on http://localhost:${PORT}`);
   console.log(`💬 Natural language: POST http://localhost:${PORT}/chat`);

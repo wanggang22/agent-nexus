@@ -61,7 +61,7 @@ app.get("/trade/status/:orderId", async (req, res) => {
   }
 });
 
-const PORT = 4004;
+const PORT = parseInt(process.env.PORT || "4004");
 const server = app.listen(PORT, () => {
   console.log(`\n💹 ${AGENT} running on http://localhost:${PORT}`);
   console.log(`   Wallet: ${getWalletAddress()}`);
