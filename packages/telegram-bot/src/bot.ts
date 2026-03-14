@@ -11,14 +11,83 @@ if (!TELEGRAM_TOKEN) {
 }
 
 const GATEWAY_URL = env.GATEWAY_URL;
+const SESSION_TTL = 15 * 60 * 1000; // 15 minutes
 const bot = new Bot(TELEGRAM_TOKEN);
 
 // Track users waiting for password input
-// state: "set_password" (new wallet) | "confirm_trade" (pending trade) | "export" (export key)
 const waitingFor = new Map<string, {
   state: "set_password" | "confirm_trade" | "export";
-  tradeData?: any; // for confirm_trade
+  tradeData?: any;
 }>();
+
+// Unlocked sessions — decrypted key in memory with expiry
+const sessions = new Map<string, {
+  privateKey: string;
+  address: string;
+  expiry: number;
+}>();
+
+function getSession(userId: string): { privateKey: string; address: string } | null {
+  const s = sessions.get(userId);
+  if (!s) return null;
+  if (Date.now() > s.expiry) {
+    sessions.delete(userId);
+    return null;
+  }
+  // Refresh TTL on each use
+  s.expiry = Date.now() + SESSION_TTL;
+  return { privateKey: s.privateKey, address: s.address };
+}
+
+function setSession(userId: string, privateKey: string, address: string) {
+  sessions.set(userId, { privateKey, address, expiry: Date.now() + SESSION_TTL });
+}
+
+function clearSession(userId: string) {
+  sessions.delete(userId);
+}
+
+// Auto-cleanup expired sessions every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessions) {
+    if (now > v.expiry) sessions.delete(k);
+  }
+}, 5 * 60 * 1000);
+
+// ── Trade execution helper ──
+async function executeTradeFn(ctx: any, tradeData: any, session: { privateKey: string; address: string }) {
+  await ctx.replyWithChatAction("typing");
+  try {
+    const { from_token, to_token, amount, chain, slippage } = tradeData;
+    const resp = await fetch(`${GATEWAY_URL}/trade/sign-and-send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_token, to_token, amount, chain, slippage,
+        wallet_address: session.address,
+        private_key: session.privateKey,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const result = await resp.json() as any;
+
+    if (result.success) {
+      await ctx.reply(
+        `✅ Trade executed!\n\n` +
+        `TX: \`${result.tx_hash}\`\n` +
+        `Wallet: \`${result.wallet}\`\n` +
+        (result.slippage ? `Slippage: ${result.slippage}\n` : "") +
+        `\n🔗 ${result.explorer}`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      await ctx.reply(`❌ Trade failed: ${result.error}`);
+    }
+  } catch (e: any) {
+    await ctx.reply(`❌ Error: ${e.message}`);
+  }
+}
 
 // /start — create wallet, ask for password
 bot.command("start", async (ctx) => {
@@ -42,6 +111,8 @@ bot.command("start", async (ctx) => {
       '• "帮我用1 OKB换USDT"\n' +
       '• "聪明钱在买什么"\n\n' +
       "/wallet — Your address\n" +
+      "/unlock — Unlock wallet (15 min session)\n" +
+      "/lock — Lock wallet immediately\n" +
       "/export — Export private key\n" +
       "/services — All services",
       { parse_mode: "Markdown" }
@@ -79,6 +150,37 @@ bot.command("wallet", async (ctx) => {
     `Deposit OKB (for gas) and tokens to trade.`,
     { parse_mode: "Markdown" }
   );
+});
+
+// /unlock — unlock wallet for 15 minutes
+bot.command("unlock", async (ctx) => {
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("⚠️ /unlock only works in private chat.");
+    return;
+  }
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  if (!isWalletReady("telegram", userId)) {
+    await ctx.reply("No wallet. Use /start first.");
+    return;
+  }
+
+  if (getSession(userId)) {
+    await ctx.reply("🔓 Already unlocked. Session refreshed (15 min).");
+    return;
+  }
+
+  waitingFor.set(userId, { state: "confirm_trade" });
+  await ctx.reply("🔐 Enter your trading password to unlock (15 min session):");
+});
+
+// /lock — immediately lock wallet
+bot.command("lock", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+  clearSession(userId);
+  await ctx.reply("🔒 Wallet locked. Use /unlock to unlock again.");
 });
 
 // /export — export private key (requires password)
@@ -170,61 +272,38 @@ bot.on("message:text", async (ctx) => {
     return;
   }
 
-  // ── Handle password for trade confirmation ──
-  if (waiting?.state === "confirm_trade" && waiting.tradeData) {
+  // ── Handle password for unlock / trade confirmation ──
+  if (waiting?.state === "confirm_trade") {
     waitingFor.delete(userId);
-
-    const unlocked = unlockWallet("telegram", userId, text);
 
     // Delete the password message
     try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
 
-    if (!unlocked) {
-      await ctx.reply("❌ Wrong password. Trade cancelled.");
+    // If no trade data, this is a /unlock request
+    if (!waiting.tradeData) {
+      const unlocked = unlockWallet("telegram", userId, text);
+      if (!unlocked) {
+        await ctx.reply("❌ Wrong password.");
+        return;
+      }
+      setSession(userId, unlocked.privateKey, unlocked.address);
+      await ctx.reply("🔓 Wallet unlocked for 15 minutes. You can now trade without entering password.\n\nUse /lock to lock immediately.");
       return;
     }
 
-    await ctx.replyWithChatAction("typing");
-
-    // Execute trade: build tx via Trader, sign locally
-    try {
-      const { from_token, to_token, amount, chain, slippage } = waiting.tradeData;
-
-      const resp = await fetch(`${GATEWAY_URL}/trade/sign-and-send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from_token, to_token, amount, chain, slippage,
-          wallet_address: unlocked.address,
-          private_key: unlocked.privateKey,
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-
-      // privateKey is now sent to Gateway's /trade/sign-and-send
-      // But wait — we said private key should never leave!
-      // Actually, both Telegram Bot and Gateway run in the SAME deployment.
-      // The key travels over localhost/internal network, not public internet.
-      // For true separation, signing should happen here in the bot.
-      // But for hackathon, this internal-only call is acceptable.
-
-      const result = await resp.json() as any;
-
-      if (result.success) {
-        await ctx.reply(
-          `✅ Trade executed!\n\n` +
-          `TX: \`${result.tx_hash}\`\n` +
-          `Wallet: \`${result.wallet}\`\n` +
-          (result.slippage ? `Slippage: ${result.slippage}\n` : "") +
-          `\n🔗 ${result.explorer}`,
-          { parse_mode: "Markdown" }
-        );
-      } else {
-        await ctx.reply(`❌ Trade failed: ${result.error}`);
+    // Has trade data — unlock + execute
+    let session = getSession(userId);
+    if (!session) {
+      const unlocked = unlockWallet("telegram", userId, text);
+      if (!unlocked) {
+        await ctx.reply("❌ Wrong password. Trade cancelled.");
+        return;
       }
-    } catch (e: any) {
-      await ctx.reply(`❌ Error: ${e.message}`);
+      setSession(userId, unlocked.privateKey, unlocked.address);
+      session = { privateKey: unlocked.privateKey, address: unlocked.address };
     }
+
+    await executeTradeFn(ctx, waiting.tradeData, session);
     return;
   }
 
@@ -295,7 +374,15 @@ bot.on("message:text", async (ctx) => {
     );
 
     if (hasTradeCall && tradeResult?.data?.needs_confirmation) {
-      // Trade needs password confirmation
+      const session = getSession(userId);
+
+      if (session) {
+        // Session active — execute immediately, no password needed
+        await executeTradeFn(ctx, tradeResult.data.trade_params, session);
+        return;
+      }
+
+      // No session — ask for password
       waitingFor.set(userId, {
         state: "confirm_trade",
         tradeData: tradeResult.data.trade_params,
@@ -303,7 +390,8 @@ bot.on("message:text", async (ctx) => {
       await ctx.reply(
         `📋 *Trade Preview*\n\n` +
         `${tradeResult.data.summary || "Ready to execute"}\n\n` +
-        `Enter your trading password to confirm:`,
+        `🔐 Enter your trading password to confirm:\n` +
+        `(or /unlock first for 15-min password-free trading)`,
         { parse_mode: "Markdown" }
       );
       return;
