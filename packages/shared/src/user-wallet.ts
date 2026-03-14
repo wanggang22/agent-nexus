@@ -206,83 +206,95 @@ export function isWalletPending(
   return pendingSetup.has(`${platform}_${userId}`);
 }
 
-// ── Cross-platform binding (Twitter ↔ Telegram) ──
+// ── Cross-platform binding (any platform ↔ any platform) ──
 interface BindCode {
   code: string;
-  telegramUserId: string;
+  sourcePlatform: string; // "telegram" or "twitter"
+  sourceUserId: string;
   expiry: number;
 }
 
-const bindCodes = new Map<string, BindCode>(); // code → BindCode
-const bindings = new Map<string, string>(); // "twitter_123" → "telegram_456"
+const bindCodes = new Map<string, BindCode>();
+// Bidirectional bindings: "twitter_123" ↔ "telegram_456"
+const bindings = new Map<string, string>();
 
 /**
- * Generate a one-time bind code for linking Twitter to Telegram wallet.
- * Code expires in 5 minutes.
+ * Generate a one-time bind code.
+ * sourcePlatform/sourceUserId = the platform that already has a wallet.
  */
-export function generateBindCode(telegramUserId: string): string {
+export function generateBindCode(sourceUserId: string, sourcePlatform = "telegram"): string {
   // Remove any existing code for this user
   for (const [code, data] of bindCodes) {
-    if (data.telegramUserId === telegramUserId) bindCodes.delete(code);
+    if (data.sourceUserId === sourceUserId && data.sourcePlatform === sourcePlatform) {
+      bindCodes.delete(code);
+    }
   }
 
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   bindCodes.set(code, {
     code,
-    telegramUserId,
-    expiry: Date.now() + 5 * 60 * 1000, // 5 minutes
+    sourcePlatform,
+    sourceUserId,
+    expiry: Date.now() + 5 * 60 * 1000,
   });
 
   return code;
 }
 
 /**
- * Verify a bind code and link Twitter user to Telegram wallet.
- * Code is consumed (deleted) after use.
+ * Verify a bind code and link the target user to the source wallet.
+ * Code is consumed after use.
  */
 export function verifyBindCode(
   code: string,
-  twitterUserId: string
+  targetUserId: string,
+  targetPlatform = "twitter"
 ): { success: boolean; address?: string; error?: string } {
   const bind = bindCodes.get(code.toUpperCase());
 
-  if (!bind) {
-    return { success: false, error: "Invalid or expired code" };
-  }
-
+  if (!bind) return { success: false, error: "Invalid or expired code" };
   if (Date.now() > bind.expiry) {
     bindCodes.delete(code.toUpperCase());
     return { success: false, error: "Code expired" };
   }
 
-  // Check Telegram wallet exists
-  const telegramKey = `telegram_${bind.telegramUserId}`;
-  if (!store[telegramKey]) {
+  const sourceKey = `${bind.sourcePlatform}_${bind.sourceUserId}`;
+  if (!store[sourceKey]) {
     bindCodes.delete(code.toUpperCase());
-    return { success: false, error: "Telegram wallet not found" };
+    return { success: false, error: "Source wallet not found" };
   }
 
-  // Bind: Twitter user → Telegram wallet
-  bindings.set(`twitter_${twitterUserId}`, telegramKey);
+  const targetKey = `${targetPlatform}_${targetUserId}`;
 
-  // Delete code — one-time use
+  // Bidirectional binding
+  bindings.set(targetKey, sourceKey);
+  bindings.set(sourceKey, targetKey);
+
+  // Also copy the encrypted wallet so both platforms have direct access
+  store[targetKey] = { ...store[sourceKey] };
+  save();
+
   bindCodes.delete(code.toUpperCase());
 
-  console.log(`[UserWallet] Bound twitter_${twitterUserId} → ${telegramKey}`);
-  return { success: true, address: store[telegramKey].address };
+  console.log(`[UserWallet] Bound ${targetKey} ↔ ${sourceKey}`);
+  return { success: true, address: store[sourceKey].address };
 }
 
 /**
- * Get the linked Telegram wallet key for a Twitter user.
+ * Get the linked wallet address for a user on any platform.
  */
-export function getLinkedWallet(twitterUserId: string): string | null {
-  const linked = bindings.get(`twitter_${twitterUserId}`);
-  if (!linked || !store[linked]) return null;
-  return store[linked].address;
+export function getLinkedWallet(userId: string, platform = "twitter"): string | null {
+  const key = `${platform}_${userId}`;
+  // Direct wallet
+  if (store[key]) return store[key].address;
+  // Linked wallet
+  const linked = bindings.get(key);
+  if (linked && store[linked]) return store[linked].address;
+  return null;
 }
 
 /**
- * Unlock the linked wallet for a Twitter user (needs Telegram session).
+ * Get the linked user ID on another platform.
  */
 export function getLinkedTelegramId(twitterUserId: string): string | null {
   const linked = bindings.get(`twitter_${twitterUserId}`);
@@ -290,7 +302,7 @@ export function getLinkedTelegramId(twitterUserId: string): string | null {
   return linked.replace("telegram_", "");
 }
 
-// Auto-cleanup expired bind codes every minute
+// Auto-cleanup expired bind codes
 setInterval(() => {
   const now = Date.now();
   for (const [code, data] of bindCodes) {

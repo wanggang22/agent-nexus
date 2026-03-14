@@ -267,15 +267,13 @@ app.post("/wallet/unlock", (req, res) => {
   res.json({ success: true, address: unlocked.address, expires_in: "1 hour" });
 });
 
-// Generate bind code (for linking Twitter ↔ Telegram)
+// Generate bind code (for linking any platform ↔ any platform)
 app.post("/bind/generate", (req, res) => {
   const { platform, user_id } = req.body;
   if (!platform || !user_id) {
     return res.status(400).json({ error: "platform, user_id required" });
   }
-  // For now, bind codes are generated from the Telegram side (in shared module)
-  // But from website, we generate with the Twitter user's ID context
-  const code = generateBindCode(user_id);
+  const code = generateBindCode(user_id, platform);
   res.json({ code, expires_in: "5 minutes" });
 });
 

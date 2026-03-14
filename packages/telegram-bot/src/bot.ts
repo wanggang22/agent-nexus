@@ -2,7 +2,7 @@ import { Bot } from "grammy";
 import {
   env, createWallet, confirmWallet, unlockWallet,
   getWalletAddress, isWalletReady, isWalletPending,
-  generateBindCode,
+  generateBindCode, verifyBindCode,
 } from "shared";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -216,6 +216,32 @@ bot.command("bindtwitter", async (ctx) => {
     `✅ One-time use — code is deleted after binding`,
     { parse_mode: "Markdown" }
   );
+});
+
+// /verify CODE — bind Telegram to a wallet created on website (Twitter)
+bot.command("verify", async (ctx) => {
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("⚠️ /verify only works in private chat.");
+    return;
+  }
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  const code = ctx.match?.trim();
+  if (!code || code.length < 4) {
+    await ctx.reply("Usage: /verify ABC123");
+    return;
+  }
+
+  const result = verifyBindCode(code, userId, "telegram");
+  if (result.success) {
+    await ctx.reply(
+      `✅ Wallet linked!\n\nAddress: \`${result.address}\`\n\nYou can now trade here using the same wallet as your website/Twitter account.`,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    await ctx.reply(`❌ ${result.error}`);
+  }
 });
 
 // /services
