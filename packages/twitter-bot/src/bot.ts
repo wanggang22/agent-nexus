@@ -32,12 +32,12 @@ const MAX_REPLIED_CACHE = 5000;
 /**
  * Call AgentNexus Gateway /chat and get a response.
  */
-async function askAgentNexus(message: string): Promise<string> {
+async function askAgentNexus(message: string, authorId?: string): Promise<string> {
   try {
     const resp = await fetch(`${GATEWAY_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, platform: "twitter", user_id: authorId }),
       signal: AbortSignal.timeout(30000),
     });
     const data = await resp.json() as any;
@@ -151,7 +151,7 @@ async function pollMentions() {
       console.log(`[TwitterBot] Processing: "${message.slice(0, 50)}..." (tweet ${tweet.id})`);
 
       // Get response from AgentNexus
-      const response = await askAgentNexus(message);
+      const response = await askAgentNexus(message, tweet.author_id);
 
       // Reply
       await replyToTweet(tweet.id, response);

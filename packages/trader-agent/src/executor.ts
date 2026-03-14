@@ -115,29 +115,43 @@ export async function getQuote(
  *
  * @param maxSlippage - Max slippage. "auto" = auto-detect, or "5" for 5%
  */
+/**
+ * Execute a trade via OKX DEX aggregator.
+ * If userPrivateKey is provided, uses the user's wallet. Otherwise uses the platform wallet.
+ */
 export async function executeTrade(
   fromToken: string,
   toToken: string,
   amount: string,
   chain = "xlayer",
-  maxSlippage = "auto"
+  maxSlippage = "auto",
+  userPrivateKey?: string
 ) {
+  // Determine which wallet to use
+  const tradeAccount = userPrivateKey
+    ? privateKeyToAccount(userPrivateKey as `0x${string}`)
+    : account;
+
+  const tradeWalletClient = userPrivateKey
+    ? createWalletClient({ account: tradeAccount, chain: xlayer, transport: http(env.XLAYER_RPC) })
+    : walletClient;
+
   // First get a quote to determine price impact for auto slippage
   const quote = await getQuote(fromToken, toToken, amount, chain, maxSlippage);
   const slippageNum = parseFloat(quote.slippage) || 1;
 
   // OKX DEX aggregator builds the swap tx with slippage protection
   const swapRaw = runOnchainos(
-    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${account.address} --slippage ${slippageNum}`
+    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${tradeAccount.address} --slippage ${slippageNum}`
   );
 
   if (!swapRaw) {
-    return { success: false, error: "Failed to get swap data from OKX DEX aggregator", order_id: null };
+    return { success: false, error: "Failed to get swap data from OKX DEX aggregator", order_id: null, wallet: tradeAccount.address };
   }
 
   const swapData = safeJsonParse(swapRaw);
   if (!swapData?.data) {
-    return { success: false, error: "Invalid swap data", order_id: null };
+    return { success: false, error: "Invalid swap data", order_id: null, wallet: tradeAccount.address };
   }
 
   const txData = swapData.data[0] || swapData.data;
@@ -146,33 +160,33 @@ export async function executeTrade(
   const value = txData.tx?.value || txData.value || "0";
 
   if (!to || !data) {
-    return { success: false, error: "Missing transaction target or calldata", order_id: null };
+    return { success: false, error: "Missing transaction target or calldata", order_id: null, wallet: tradeAccount.address };
   }
 
   // Step 1: Simulate transaction before sending
   const simRaw = runOnchainos(
-    `gateway simulate --from ${account.address} --to ${to} --data ${data} --chain ${chain}`
+    `gateway simulate --from ${tradeAccount.address} --to ${to} --data ${data} --chain ${chain}`
   );
   if (simRaw && simRaw.includes("fail")) {
-    return { success: false, error: "Transaction simulation failed — trade would revert", order_id: null };
+    return { success: false, error: "Transaction simulation failed — trade would revert", order_id: null, wallet: tradeAccount.address };
   }
 
   // Step 2: Estimate gas
   let gasEstimate: bigint | undefined;
   try {
     gasEstimate = await publicClient.estimateGas({
-      account: account.address,
+      account: tradeAccount.address,
       to: to as `0x${string}`,
       data: data as `0x${string}`,
       value: BigInt(value),
     });
   } catch (e: any) {
-    return { success: false, error: `Gas estimation failed: ${e.message}`, order_id: null };
+    return { success: false, error: `Gas estimation failed: ${e.message}`, order_id: null, wallet: tradeAccount.address };
   }
 
   // Step 3: Send transaction
   try {
-    const txHash = await walletClient.sendTransaction({
+    const txHash = await tradeWalletClient.sendTransaction({
       to: to as `0x${string}`,
       data: data as `0x${string}`,
       value: BigInt(value),
@@ -185,13 +199,14 @@ export async function executeTrade(
       success: true,
       tx_hash: txHash,
       order_id: orderId,
+      wallet: tradeAccount.address,
       chain,
       slippage: quote.slippage,
       gas_estimate: gasEstimate?.toString(),
       explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
     };
   } catch (e: any) {
-    return { success: false, error: e.message, order_id: null };
+    return { success: false, error: e.message, order_id: null, wallet: tradeAccount.address };
   }
 }
 

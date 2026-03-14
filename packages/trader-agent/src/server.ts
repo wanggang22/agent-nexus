@@ -38,11 +38,11 @@ app.post("/trade/quote", async (req, res) => {
 
 app.post("/trade/execute", async (req, res) => {
   try {
-    const { from_token, to_token, amount, chain, slippage } = req.body;
+    const { from_token, to_token, amount, chain, slippage, user_private_key } = req.body;
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const result = await executeTrade(from_token, to_token, amount, chain, slippage);
+    const result = await executeTrade(from_token, to_token, amount, chain, slippage, user_private_key);
     recordCall(AGENT, "execute", 0);
     res.json(result);
   } catch (e: any) {

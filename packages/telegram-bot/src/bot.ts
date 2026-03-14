@@ -10,23 +10,60 @@ if (!TELEGRAM_TOKEN) {
 const GATEWAY_URL = env.GATEWAY_URL;
 const bot = new Bot(TELEGRAM_TOKEN);
 
-// /start command
-bot.command("start", (ctx) =>
-  ctx.reply(
-    "👋 Welcome to AgentNexus!\n\n" +
-    "I'm your AI crypto trading assistant on X Layer.\n\n" +
-    "Just send me a message, for example:\n" +
-    '• "分析下ETH"\n' +
-    '• "这个币安全吗 0x1234..."\n' +
-    '• "最近聪明钱在买什么"\n' +
-    '• "trending tokens"\n' +
-    '• "full analysis on OKB"\n\n' +
-    "Commands:\n" +
-    "/start — This help message\n" +
-    "/services — List all available services\n" +
-    "/stats — Platform statistics"
-  )
-);
+// /start command — auto-create wallet
+bot.command("start", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  try {
+    const resp = await fetch(`${GATEWAY_URL}/wallet/telegram/${userId}`, { signal: AbortSignal.timeout(5000) });
+    const wallet = await resp.json() as any;
+
+    await ctx.reply(
+      "👋 Welcome to AgentNexus!\n\n" +
+      `💰 Your X Layer Wallet:\n\`${wallet.address}\`\n\n` +
+      (wallet.is_new
+        ? "⚠️ This is a new wallet. Deposit OKB (for gas) and tokens to start trading.\n\n"
+        : "✅ Wallet loaded.\n\n") +
+      "Just send me a message:\n" +
+      '• "分析下ETH" — basic analysis (free)\n' +
+      '• "深度分析ETH" — deep AI analysis (paid)\n' +
+      '• "这个币安全吗 0x1234..." — safety check\n' +
+      '• "帮我用1 OKB换USDT" — swap tokens\n' +
+      '• "最近聪明钱在买什么" — smart money signals\n\n' +
+      "Commands:\n" +
+      "/wallet — Show your wallet address\n" +
+      "/services — List all services\n" +
+      "/stats — Platform statistics",
+      { parse_mode: "Markdown" }
+    );
+  } catch {
+    await ctx.reply(
+      "👋 Welcome to AgentNexus! Gateway is offline — try again later."
+    );
+  }
+});
+
+// /wallet command
+bot.command("wallet", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  try {
+    const resp = await fetch(`${GATEWAY_URL}/wallet/telegram/${userId}`, { signal: AbortSignal.timeout(5000) });
+    const wallet = await resp.json() as any;
+
+    await ctx.reply(
+      `💰 *Your X Layer Wallet*\n\n` +
+      `Address: \`${wallet.address}\`\n\n` +
+      `Deposit OKB (gas) and tokens to this address to trade.\n` +
+      `Network: X Layer Mainnet (Chain ID: 196)`,
+      { parse_mode: "Markdown" }
+    );
+  } catch {
+    await ctx.reply("❌ Gateway is offline.");
+  }
+});
 
 // /services command
 bot.command("services", async (ctx) => {
@@ -35,7 +72,7 @@ bot.command("services", async (ctx) => {
     const data = await resp.json() as any;
     let text = "📋 *AgentNexus Services*\n\n";
     for (const agent of data.agents || []) {
-      text += `*${agent.name}* — ${agent.description}\n`;
+      text += `*${agent.name}*\n`;
       for (const svc of agent.services || []) {
         text += `  \`${svc.method} ${svc.route}\` ${svc.price}\n`;
       }
@@ -43,7 +80,7 @@ bot.command("services", async (ctx) => {
     }
     await ctx.reply(text, { parse_mode: "Markdown" });
   } catch {
-    await ctx.reply("❌ Gateway is offline. Make sure AgentNexus is running.");
+    await ctx.reply("❌ Gateway is offline.");
   }
 });
 
@@ -64,18 +101,23 @@ bot.command("stats", async (ctx) => {
   }
 });
 
-// All other messages → forward to /chat
+// All other messages → forward to /chat with user identity
 bot.on("message:text", async (ctx) => {
   const message = ctx.message.text;
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
 
-  // Show typing indicator
   await ctx.replyWithChatAction("typing");
 
   try {
     const resp = await fetch(`${GATEWAY_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        platform: "telegram",
+        user_id: userId,
+      }),
       signal: AbortSignal.timeout(30000),
     });
 
@@ -86,10 +128,8 @@ bot.on("message:text", async (ctx) => {
       return;
     }
 
-    // Send the AI summary
     let reply = data.reply || "No response from agents.";
 
-    // Add token resolution info if any
     if (data.tokens_resolved && Object.keys(data.tokens_resolved).length > 0) {
       const resolved = Object.entries(data.tokens_resolved)
         .map(([sym, addr]) => `${sym} → \`${(addr as string).slice(0, 10)}...\``)
@@ -97,12 +137,10 @@ bot.on("message:text", async (ctx) => {
       reply += `\n\n🔗 ${resolved}`;
     }
 
-    // Add what services were called
     if (data.calls_made && data.calls_made.length > 0) {
       reply += `\n\n⚡ ${data.calls_made.join(" | ")}`;
     }
 
-    // Telegram message limit is 4096 chars
     if (reply.length > 4000) {
       reply = reply.slice(0, 3997) + "...";
     }
@@ -127,7 +165,6 @@ bot.start({
   },
 });
 
-// Graceful shutdown
 const shutdown = () => {
   console.log("\n[TelegramBot] Shutting down...");
   bot.stop();

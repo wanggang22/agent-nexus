@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
-import { env, resolveToken, registerToken } from "shared";
+import { env, resolveToken, registerToken, getOrCreateWallet, getWalletStats } from "shared";
 
 const AGENT = "Gateway";
 
@@ -176,8 +176,30 @@ const AGENT_ENDPOINTS: Record<string, string> = {
   trader: TRADER_URL,
 };
 
+// User wallet info
+app.get("/wallet/:platform/:userId", (req, res) => {
+  const { platform, userId } = req.params;
+  if (!["telegram", "twitter", "api"].includes(platform)) {
+    return res.status(400).json({ error: "platform must be telegram, twitter, or api" });
+  }
+  const wallet = getOrCreateWallet(platform as any, userId);
+  res.json({
+    address: wallet.address,
+    is_new: wallet.isNew,
+    platform,
+    user_id: userId,
+    deposit_info: wallet.isNew
+      ? `Wallet created! Deposit OKB or tokens to ${wallet.address} to start trading on X Layer.`
+      : undefined,
+  });
+});
+
+app.get("/wallet-stats", (_req, res) => {
+  res.json(getWalletStats());
+});
+
 app.post("/chat", async (req, res) => {
-  const { message, chain } = req.body;
+  const { message, chain, platform, user_id } = req.body;
   const targetChain = chain || "xlayer";
 
   if (!message || typeof message !== "string") {
@@ -210,7 +232,13 @@ app.post("/chat", async (req, res) => {
       return res.json({ reply: intent.reply || "I'm not sure what you'd like to do. Try asking about a token or signal.", results: [] });
     }
 
-    // Step 2: Resolve token symbols → addresses
+    // Step 2: Get user wallet if platform/user_id provided
+    let userWallet: { address: string; privateKey: string; isNew: boolean } | null = null;
+    if (platform && user_id) {
+      userWallet = getOrCreateWallet(platform, user_id);
+    }
+
+    // Step 3: Resolve token symbols → addresses
     const resolvedTokens: Record<string, string> = {};
     for (const call of calls) {
       for (const token of call.tokens || []) {
@@ -253,6 +281,10 @@ app.post("/chat", async (req, res) => {
               if (typeof v === "string" && resolvedTokens[v]) {
                 (body as any)[k] = resolvedTokens[v];
               }
+            }
+            // Inject user wallet for trade execution
+            if (userWallet && call.agent === "trader" && path.includes("/execute")) {
+              (body as any).user_private_key = userWallet.privateKey;
             }
           }
 

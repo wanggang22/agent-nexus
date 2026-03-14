@@ -6,3 +6,4 @@ export * from "./x402-middleware.js";
 export * from "./onchainos.js";
 export * from "./agent-helpers.js";
 export * from "./token-registry.js";
+export * from "./user-wallet.js";
