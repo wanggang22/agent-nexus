@@ -31,15 +31,27 @@ const AGENTS = [
     ],
   },
   {
-    name: "Analyst Agent",
-    description: "Deep market analysis powered by Claude AI — paid (covers AI cost)",
+    name: "Analyst Agent — Basic (FREE)",
+    description: "Rule-based analysis from OnchainOS data — no AI, instant results",
     endpoint: "http://localhost:4002",
     services: [
-      { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Technical analysis report (AI)" },
-      { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Fundamental analysis (AI)" },
-      { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "CEX-DEX spread analysis (AI)" },
-      { method: "GET", route: "/analysis/meme/:token", price: "$0.03", description: "Meme virality & community analysis (AI)" },
-      { method: "GET", route: "/analysis/full/:token", price: "$0.08", description: "Full analysis — tech + fundamental + meme + spread (AI)" },
+      { method: "GET", route: "/basic/technical/:token", price: "free", description: "Basic technical analysis (rule-based)" },
+      { method: "GET", route: "/basic/fundamental/:token", price: "free", description: "Basic fundamental analysis (rule-based)" },
+      { method: "GET", route: "/basic/spread/:token", price: "free", description: "Basic DEX price info" },
+      { method: "GET", route: "/basic/meme/:token", price: "free", description: "Basic meme data (smart money, KOL, risks)" },
+      { method: "GET", route: "/basic/full/:token", price: "free", description: "Basic full analysis (all dimensions, rule-based)" },
+    ],
+  },
+  {
+    name: "Analyst Agent — Deep (PAID)",
+    description: "AI-powered deep analysis by Claude — cultural insight, predictions, recommendations",
+    endpoint: "http://localhost:4002",
+    services: [
+      { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Deep technical analysis (AI)" },
+      { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Deep fundamental analysis (AI)" },
+      { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "Deep CEX-DEX arbitrage analysis (AI)" },
+      { method: "GET", route: "/analysis/meme/:token", price: "$0.03", description: "Deep meme virality + cultural analysis (AI)" },
+      { method: "GET", route: "/analysis/full/:token", price: "$0.08", description: "Deep full analysis — all dimensions (AI)" },
     ],
   },
   {
@@ -107,12 +119,19 @@ SIGNAL (free):
 - GET /signals/meme-scan — new meme token scan
 - GET /signals/trending — trending tokens
 
-ANALYST (AI, paid):
-- GET /analysis/technical/{token} — technical analysis
-- GET /analysis/fundamental/{token} — fundamental analysis
-- GET /analysis/spread/{token} — CEX-DEX spread
-- GET /analysis/meme/{token} — meme virality analysis
-- GET /analysis/full/{token} — full analysis (all dimensions)
+ANALYST BASIC (free, rule-based):
+- GET /basic/technical/{token} — basic technical analysis
+- GET /basic/fundamental/{token} — basic fundamental analysis
+- GET /basic/spread/{token} — basic price data
+- GET /basic/meme/{token} — basic meme data (smart money, KOL, risks)
+- GET /basic/full/{token} — basic full analysis
+
+ANALYST DEEP (paid, Claude AI):
+- GET /analysis/technical/{token} — deep technical analysis ($0.02)
+- GET /analysis/fundamental/{token} — deep fundamental analysis ($0.03)
+- GET /analysis/spread/{token} — deep CEX-DEX spread ($0.01)
+- GET /analysis/meme/{token} — deep meme virality + cultural ($0.03)
+- GET /analysis/full/{token} — deep full analysis ($0.08)
 
 RISK (free):
 - POST /risk/assess (body: {token, chain}) — pre-trade risk
@@ -128,9 +147,11 @@ Rules:
 - Use the symbol or address as-is in {token} — the system will resolve symbols to addresses automatically.
 - For trade body fields (from_token, to_token), also use symbol or address as-is.
 - For "safe?", "rug?", "honeypot?" → risk/token-safety
-- For "analyze", "technical", "fundamental" → analyst
-- For "meme", "virality", "community" → analyst/meme
-- For "full analysis", "全面分析" → analyst/full
+- For "analyze", "technical", "fundamental" without "deep"/"深度" → basic (free)
+- For "deep", "深度", "AI分析", "详细" → analyst deep (paid)
+- For "meme", "virality", "community" without "deep" → basic/meme (free)
+- For "full analysis", "全面分析" without "deep" → basic/full (free)
+- For "深度分析", "deep analysis", "AI analysis" → analysis/full (paid)
 - For "smart money", "聪明钱", "whale", "鲸鱼" → signals/smart-money or whale-alert
 - For "trending", "热门" → signals/trending
 - For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
@@ -278,6 +299,7 @@ app.post("/chat", async (req, res) => {
 // Maps path prefix → backend agent endpoint
 const ROUTE_MAP: Array<{ prefix: string; target: string }> = [
   { prefix: "/signals", target: "http://localhost:4001" },
+  { prefix: "/basic", target: "http://localhost:4002" },
   { prefix: "/analysis", target: "http://localhost:4002" },
   { prefix: "/ai-stats", target: "http://localhost:4002" },
   { prefix: "/risk", target: "http://localhost:4003" },

@@ -258,6 +258,246 @@ async function aiAnalyze(data: Record<string, string>, analysisType: string, cac
   return result;
 }
 
+// ══════════════════════════════════════════════════════════════
+// BASIC MODE — Free, rule-based analysis from OnchainOS data
+// ══════════════════════════════════════════════════════════════
+
+export function basicTechnical(tokenAddress: string, chain = "xlayer"): TechnicalAnalysis {
+  const data = gatherMarketData(tokenAddress, chain);
+  const kline = safeJsonParse(data.kline);
+  const priceRaw = safeJsonParse(data.price);
+
+  let trend: "bullish" | "bearish" | "neutral" = "neutral";
+  let rsi = 50;
+  let support = 0;
+  let resistance = 0;
+  let volumeTrend: "increasing" | "decreasing" | "stable" = "stable";
+
+  // Parse K-line candles for trend
+  const candles = Array.isArray(kline?.data) ? kline.data : Array.isArray(kline) ? kline : [];
+  if (candles.length >= 6) {
+    const recent = candles.slice(-6);
+    let greenCount = 0;
+    let redCount = 0;
+    const prices: number[] = [];
+    const volumes: number[] = [];
+
+    for (const c of recent) {
+      const open = parseFloat(c.open || c.o || "0");
+      const close = parseFloat(c.close || c.c || "0");
+      const high = parseFloat(c.high || c.h || "0");
+      const low = parseFloat(c.low || c.l || "0");
+      const vol = parseFloat(c.volume || c.vol || c.v || "0");
+      if (close > open) greenCount++;
+      if (close < open) redCount++;
+      prices.push(close, high, low);
+      volumes.push(vol);
+    }
+
+    if (greenCount >= 4) trend = "bullish";
+    else if (redCount >= 4) trend = "bearish";
+
+    if (prices.length > 0) {
+      support = Math.min(...prices.filter((p) => p > 0));
+      resistance = Math.max(...prices);
+    }
+
+    // Simple volume trend: compare last 3 vs first 3
+    if (volumes.length >= 6) {
+      const recentVol = volumes.slice(-3).reduce((a, b) => a + b, 0) / 3;
+      const oldVol = volumes.slice(0, 3).reduce((a, b) => a + b, 0) / 3;
+      if (oldVol > 0) {
+        const ratio = recentVol / oldVol;
+        if (ratio > 1.2) volumeTrend = "increasing";
+        else if (ratio < 0.8) volumeTrend = "decreasing";
+      }
+    }
+
+    // Simple RSI estimate from price changes
+    let gains = 0, losses = 0, periods = 0;
+    for (let i = 1; i < candles.length && i <= 14; i++) {
+      const prev = parseFloat(candles[i - 1].close || candles[i - 1].c || "0");
+      const curr = parseFloat(candles[i].close || candles[i].c || "0");
+      if (prev > 0) {
+        const change = curr - prev;
+        if (change > 0) gains += change;
+        else losses += Math.abs(change);
+        periods++;
+      }
+    }
+    if (periods > 0 && (gains + losses) > 0) {
+      const avgGain = gains / periods;
+      const avgLoss = losses / periods;
+      rsi = avgLoss === 0 ? 100 : Math.round(100 - 100 / (1 + avgGain / avgLoss));
+    }
+  }
+
+  return { trend, support, resistance, rsi_14: rsi, volume_trend: volumeTrend };
+}
+
+export function basicFundamental(tokenAddress: string, chain = "xlayer"): FundamentalAnalysis {
+  const data = gatherMarketData(tokenAddress, chain);
+  const info = safeJsonParse(data.tokenInfo);
+  const holdersRaw = safeJsonParse(data.holders);
+  const liqRaw = safeJsonParse(data.liquidity);
+
+  let concentration: "low_risk" | "medium_risk" | "high_risk" = "medium_risk";
+  let honeypot = false;
+  let buyTax = 0;
+  let sellTax = 0;
+  let liquidity = 0;
+
+  // Extract from token info
+  const tokenData = info?.data || info || {};
+  const riskLevel = parseInt(tokenData.riskControlLevel || "0");
+  if (riskLevel >= 3) honeypot = true;
+
+  buyTax = parseFloat(tokenData.buyTax || tokenData.totalBuyFee || "0");
+  sellTax = parseFloat(tokenData.sellTax || tokenData.totalSellFee || "0");
+  if (sellTax > 50) honeypot = true;
+
+  liquidity = parseFloat(tokenData.liquidityUsd || tokenData.marketCapUsd || "0");
+  if (!liquidity && liqRaw) {
+    liquidity = parseFloat(liqRaw.data?.totalLiquidity || liqRaw.totalLiquidity || "0");
+  }
+
+  // Holder concentration
+  const holders = holdersRaw?.data || holdersRaw || [];
+  if (Array.isArray(holders) && holders.length > 0) {
+    const top10Pct = holders.slice(0, 10).reduce((sum: number, h: any) => {
+      return sum + parseFloat(h.percentage || h.pct || "0");
+    }, 0);
+    if (top10Pct > 60) concentration = "high_risk";
+    else if (top10Pct < 30) concentration = "low_risk";
+  }
+
+  return { holder_concentration: concentration, honeypot, buy_tax: buyTax, sell_tax: sellTax, liquidity_usd: liquidity };
+}
+
+export function basicSpread(tokenAddress: string, chain = "xlayer"): SpreadAnalysis {
+  const priceRaw = runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`);
+  const parsed = safeJsonParse(priceRaw);
+  const dexPrice = parseFloat(parsed?.data?.price || parsed?.price || "0");
+
+  return {
+    cex_price: 0,
+    dex_price: dexPrice,
+    spread_pct: 0,
+    arbitrage_viable: false,
+    est_profit_after_fees: 0,
+  };
+}
+
+export function basicMeme(tokenAddress: string, chain = "xlayer"): MemeAnalysis {
+  const data = gatherMemeData(tokenAddress, chain);
+
+  const info = safeJsonParse(data.tokenInfo) || {};
+  const priceInfo = safeJsonParse(data.priceInfo) || {};
+  const holders = safeJsonParse(data.holders) || {};
+  const smartMoney = safeJsonParse(data.smartMoneyTraders) || {};
+  const kols = safeJsonParse(data.kolTraders) || {};
+  const insiders = safeJsonParse(data.insiderTraders) || {};
+  const trades = safeJsonParse(data.recentTrades) || {};
+
+  const tokenData = info.data || info;
+  const priceData = priceInfo.data || priceInfo;
+
+  // Unique traders from recent trades
+  const tradeList = Array.isArray(trades.data) ? trades.data : Array.isArray(trades) ? trades : [];
+  const uniqueTraders = new Set(tradeList.map((t: any) => t.maker || t.from || t.address)).size;
+
+  // Smart money count
+  const smList = Array.isArray(smartMoney.data) ? smartMoney.data : [];
+  const kolList = Array.isArray(kols.data) ? kols.data : [];
+  const insiderList = Array.isArray(insiders.data) ? insiders.data : [];
+
+  let sentiment: "accumulating" | "holding" | "dumping" | "absent" = "absent";
+  if (smList.length > 0) {
+    const buying = smList.filter((t: any) => (t.type || t.side || "").toLowerCase().includes("buy")).length;
+    const selling = smList.filter((t: any) => (t.type || t.side || "").toLowerCase().includes("sell")).length;
+    if (buying > selling) sentiment = "accumulating";
+    else if (selling > buying) sentiment = "dumping";
+    else sentiment = "holding";
+  }
+
+  const riskFactors: string[] = [];
+  if (insiderList.length > 3) riskFactors.push("insider_heavy");
+  if (smList.length === 0 && kolList.length === 0) riskFactors.push("no_community");
+
+  // Holder distribution check
+  const holderList = Array.isArray(holders.data) ? holders.data : [];
+  if (holderList.length > 0) {
+    const top10Pct = holderList.slice(0, 10).reduce((s: number, h: any) => s + parseFloat(h.percentage || h.pct || "0"), 0);
+    if (top10Pct > 60) riskFactors.push("whale_concentrated");
+  }
+
+  return {
+    virality_score: 0,
+    narrative_strength: "none",
+    cultural_appeal: "Basic mode — upgrade to deep analysis for cultural assessment",
+    community_metrics: {
+      twitter_mentions: 0,
+      social_score: 0,
+      unique_traders_24h: uniqueTraders,
+      holder_growth_trend: "stable",
+    },
+    smart_money_sentiment: sentiment,
+    kol_activity: kolList.length > 0 ? `${kolList.length} KOLs trading` : "No KOL data",
+    risk_factors: riskFactors,
+    catalyst: "Basic mode — upgrade to deep analysis for catalyst prediction",
+  };
+}
+
+export function basicFullAnalysis(tokenAddress: string, chain = "xlayer"): AnalysisReport {
+  const technical = basicTechnical(tokenAddress, chain);
+  const fundamental = basicFundamental(tokenAddress, chain);
+  const spread = basicSpread(tokenAddress, chain);
+  const meme = basicMeme(tokenAddress, chain);
+
+  // Simple rule-based recommendation
+  let recommendation: "BUY" | "SELL" | "HOLD" | "AVOID" = "HOLD";
+  let confidence = 0.4;
+  let reasoning = "";
+
+  if (fundamental.honeypot || fundamental.sell_tax > 20) {
+    recommendation = "AVOID";
+    confidence = 0.9;
+    reasoning = "Honeypot or high sell tax detected";
+  } else if (fundamental.holder_concentration === "high_risk" && fundamental.liquidity_usd < 10000) {
+    recommendation = "AVOID";
+    confidence = 0.75;
+    reasoning = "High concentration + low liquidity";
+  } else if (technical.trend === "bullish" && technical.volume_trend === "increasing") {
+    recommendation = "BUY";
+    confidence = 0.55;
+    reasoning = "Bullish trend with increasing volume (basic analysis)";
+  } else if (technical.trend === "bearish" && technical.volume_trend === "increasing") {
+    recommendation = "SELL";
+    confidence = 0.55;
+    reasoning = "Bearish trend with increasing sell volume (basic analysis)";
+  } else {
+    reasoning = "No strong signal — consider deep analysis for better insight";
+  }
+
+  return {
+    analysis_id: generateId(),
+    token: tokenAddress,
+    chain,
+    technical,
+    fundamental,
+    spread,
+    meme,
+    recommendation,
+    confidence,
+    reasoning,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// DEEP MODE — Paid, Claude AI-powered analysis
+// ══════════════════════════════════════════════════════════════
+
 export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"): Promise<TechnicalAnalysis> {
   const data = gatherMarketData(tokenAddress, chain);
   const hasData = Object.values(data).some((v) => v);

@@ -1,7 +1,11 @@
 import express from "express";
 import cors from "cors";
 import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { technicalAnalysis, fundamentalAnalysis, spreadAnalysis, memeAnalysis, fullAnalysis, getAiCostStats } from "./analysis.js";
+import {
+  technicalAnalysis, fundamentalAnalysis, spreadAnalysis, memeAnalysis, fullAnalysis,
+  basicTechnical, basicFundamental, basicSpread, basicMeme, basicFullAnalysis,
+  getAiCostStats,
+} from "./analysis.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Analyst Agent";
@@ -35,6 +39,63 @@ app.get("/ai-stats", (_req, res) => {
   res.json(getAiCostStats());
 });
 
+// ── Basic mode (FREE): rule-based analysis from OnchainOS data ──
+app.get("/basic/technical/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicTechnical(req.params.token, chain);
+    recordCall(AGENT, "basic-technical", 0);
+    res.json({ mode: "basic", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/basic/fundamental/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicFundamental(req.params.token, chain);
+    recordCall(AGENT, "basic-fundamental", 0);
+    res.json({ mode: "basic", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/basic/spread/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicSpread(req.params.token, chain);
+    recordCall(AGENT, "basic-spread", 0);
+    res.json({ mode: "basic", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/basic/meme/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicMeme(req.params.token, chain);
+    recordCall(AGENT, "basic-meme", 0);
+    res.json({ mode: "basic", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/basic/full/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicFullAnalysis(req.params.token, chain);
+    recordCall(AGENT, "basic-full", 0);
+    res.json({ mode: "basic", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Deep mode (PAID): Claude AI-powered analysis ──
 app.get("/analysis/technical/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
@@ -95,10 +156,15 @@ const server = app.listen(PORT, () => {
   console.log(`\n📊 ${AGENT} running on http://localhost:${PORT}`);
   console.log(`   Wallet: ${account.address}`);
   console.log(`   AI engine: ${env.ANTHROPIC_API_KEY ? "Claude (active)" : "Claude (no API key)"}`);
-  console.log(`   GET /analysis/technical/:token   ($0.02)`);
-  console.log(`   GET /analysis/fundamental/:token  ($0.03)`);
-  console.log(`   GET /analysis/spread/:token       ($0.01)`);
-  console.log(`   GET /analysis/meme/:token          ($0.03)`);
-  console.log(`   GET /analysis/full/:token          ($0.08)\n`);
+  console.log(`   [FREE]  GET /basic/technical/:token`);
+  console.log(`   [FREE]  GET /basic/fundamental/:token`);
+  console.log(`   [FREE]  GET /basic/spread/:token`);
+  console.log(`   [FREE]  GET /basic/meme/:token`);
+  console.log(`   [FREE]  GET /basic/full/:token`);
+  console.log(`   [PAID]  GET /analysis/technical/:token   ($0.02)`);
+  console.log(`   [PAID]  GET /analysis/fundamental/:token ($0.03)`);
+  console.log(`   [PAID]  GET /analysis/spread/:token      ($0.01)`);
+  console.log(`   [PAID]  GET /analysis/meme/:token        ($0.03)`);
+  console.log(`   [PAID]  GET /analysis/full/:token        ($0.08)\n`);
 });
 setupGracefulShutdown(server, AGENT);
