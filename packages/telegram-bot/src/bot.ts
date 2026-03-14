@@ -1,9 +1,5 @@
 import { Bot } from "grammy";
-import {
-  env, createWallet, confirmWallet, unlockWallet,
-  getWalletAddress, isWalletReady, isWalletPending,
-  generateBindCode, verifyBindCode,
-} from "shared";
+import { env, getWalletAddress, isWalletReady, verifyBindCode } from "shared";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TELEGRAM_TOKEN) {
@@ -12,50 +8,35 @@ if (!TELEGRAM_TOKEN) {
 }
 
 const GATEWAY_URL = env.GATEWAY_URL;
+const SITE_URL = process.env.SITE_URL || "https://agent-nexus.up.railway.app";
 const bot = new Bot(TELEGRAM_TOKEN);
 
-// Track users waiting for password input
-const waitingFor = new Map<string, {
-  state: "set_password" | "confirm_trade" | "export";
-  tradeData?: any;
-}>();
+const REGISTER_MSG = (site: string) =>
+  `You need to register first:\n\n` +
+  `1. Go to ${site}\n` +
+  `2. Login with Twitter\n` +
+  `3. Create wallet + set trading password\n` +
+  `4. Click "Bind Telegram" → get a code\n` +
+  `5. Come back here and send /verify CODE`;
 
-// Session helpers — shared via Gateway
-async function setSession(userId: string, privateKey: string, address: string) {
-  await fetch(`${GATEWAY_URL}/session/unlock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ platform: "telegram", user_id: userId, private_key: privateKey, address }),
-  }).catch(() => {});
-}
-
-async function clearSession(userId: string) {
-  await fetch(`${GATEWAY_URL}/session/lock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ platform: "telegram", user_id: userId }),
-  }).catch(() => {});
-}
-
-async function checkSession(userId: string): Promise<boolean> {
+// Session check via Gateway
+async function checkSession(platform: string, userId: string): Promise<boolean> {
   try {
-    const resp = await fetch(`${GATEWAY_URL}/session/check/telegram/${userId}`, { signal: AbortSignal.timeout(3000) });
+    const resp = await fetch(`${GATEWAY_URL}/session/check/${platform}/${userId}`, { signal: AbortSignal.timeout(3000) });
     const data = await resp.json() as any;
     return !!data.active;
   } catch { return false; }
 }
 
-// ── Trade execution helper ──
-async function executeTradeFn(ctx: any, tradeData: any, userId: string) {
+// Trade execution via Gateway session
+async function executeTrade(ctx: any, tradeData: any, userId: string) {
   await ctx.replyWithChatAction("typing");
   try {
-    const { from_token, to_token, amount, chain, slippage } = tradeData;
-    // Use Gateway session — no private key passed, Gateway looks it up
     const resp = await fetch(`${GATEWAY_URL}/trade/sign-and-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        from_token, to_token, amount, chain, slippage,
+        ...tradeData,
         platform: "telegram",
         user_id: userId,
       }),
@@ -80,145 +61,29 @@ async function executeTradeFn(ctx: any, tradeData: any, userId: string) {
   }
 }
 
-// /start — create wallet, ask for password
+// /start
 bot.command("start", async (ctx) => {
-  if (ctx.chat?.type !== "private") {
-    await ctx.reply("Please use this bot in private chat.");
-    return;
-  }
-
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
 
-  const wallet = createWallet("telegram", userId);
-
-  if (!wallet.isNew) {
-    // Already confirmed
+  if (isWalletReady("telegram", userId)) {
+    const address = getWalletAddress("telegram", userId);
     await ctx.reply(
       `Welcome back!\n\n` +
-      `Your wallet: \`${wallet.address}\`\n\n` +
-      "Send me a message to get started:\n" +
+      `Wallet: \`${address}\`\n\n` +
+      "Just send a message:\n" +
       '• "分析下ETH"\n' +
-      '• "帮我用1 OKB换USDT"\n' +
+      '• "帮我换1 OKB到USDT"\n' +
       '• "聪明钱在买什么"\n\n' +
-      "/wallet — Your address\n" +
-      "/unlock — Unlock wallet (permanent session)\n" +
-      "/lock — Lock wallet immediately\n" +
-      "/export — Export private key\n" +
-      "/services — All services",
+      "Wallet is managed on the website. Unlock there to trade here.",
       { parse_mode: "Markdown" }
     );
-    return;
+  } else {
+    await ctx.reply(REGISTER_MSG(SITE_URL));
   }
-
-  // New wallet — need password
-  waitingFor.set(userId, { state: "set_password" });
-  await ctx.reply(
-    `🔐 Your new X Layer wallet:\n\`${wallet.address}\`\n\n` +
-    "Please set a *trading password* (min 6 chars).\n" +
-    "This password encrypts your private key — without it, nobody (including us) can access your funds.\n\n" +
-    "⚠️ *Remember this password! It cannot be recovered.*\n\n" +
-    "Type your password now:",
-    { parse_mode: "Markdown" }
-  );
 });
 
-// /wallet — show address
-bot.command("wallet", async (ctx) => {
-  const userId = ctx.from?.id?.toString();
-  if (!userId) return;
-
-  const address = getWalletAddress("telegram", userId);
-  if (!address) {
-    await ctx.reply("No wallet found. Use /start to create one.");
-    return;
-  }
-
-  await ctx.reply(
-    `💰 *Your X Layer Wallet*\n\n` +
-    `\`${address}\`\n\n` +
-    `Network: X Layer Mainnet (Chain ID: 196)\n` +
-    `Deposit OKB (for gas) and tokens to trade.`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// /unlock — unlock wallet for permanentutes
-bot.command("unlock", async (ctx) => {
-  if (ctx.chat?.type !== "private") {
-    await ctx.reply("⚠️ /unlock only works in private chat.");
-    return;
-  }
-  const userId = ctx.from?.id?.toString();
-  if (!userId) return;
-
-  if (!isWalletReady("telegram", userId)) {
-    await ctx.reply("No wallet. Use /start first.");
-    return;
-  }
-
-  if (await checkSession(userId)) {
-    await ctx.reply("🔓 Already unlocked. Session refreshed (permanent).");
-    return;
-  }
-
-  waitingFor.set(userId, { state: "confirm_trade" });
-  await ctx.reply("🔐 Enter your trading password to unlock (permanent session):");
-});
-
-// /lock — immediately lock wallet
-bot.command("lock", async (ctx) => {
-  const userId = ctx.from?.id?.toString();
-  if (!userId) return;
-  await clearSession(userId);
-  await ctx.reply("🔒 Wallet locked. Use /unlock to unlock again.");
-});
-
-// /export — export private key (requires password)
-bot.command("export", async (ctx) => {
-  if (ctx.chat?.type !== "private") {
-    await ctx.reply("⚠️ /export only works in private chat.");
-    return;
-  }
-
-  const userId = ctx.from?.id?.toString();
-  if (!userId) return;
-
-  if (!isWalletReady("telegram", userId)) {
-    await ctx.reply("No wallet found. Use /start to create one.");
-    return;
-  }
-
-  waitingFor.set(userId, { state: "export" });
-  await ctx.reply("🔐 Enter your trading password to export your private key:");
-});
-
-// /bindtwitter — link Twitter account to this wallet
-bot.command("bindtwitter", async (ctx) => {
-  if (ctx.chat?.type !== "private") {
-    await ctx.reply("⚠️ /bindtwitter only works in private chat.");
-    return;
-  }
-  const userId = ctx.from?.id?.toString();
-  if (!userId) return;
-
-  if (!isWalletReady("telegram", userId)) {
-    await ctx.reply("No wallet. Use /start first.");
-    return;
-  }
-
-  const code = generateBindCode(userId);
-  await ctx.reply(
-    `🐦 *Bind Twitter Account*\n\n` +
-    `Tweet or reply to @AgentNexus with:\n\n` +
-    `\`@AgentNexus verify ${code}\`\n\n` +
-    `⏰ Code expires in 5 minutes\n` +
-    `✅ One-time use — code is deleted after binding`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// /verify CODE — bind Telegram to a wallet created on website (Twitter)
+// /verify CODE — bind Telegram to website wallet
 bot.command("verify", async (ctx) => {
   if (ctx.chat?.type !== "private") {
     await ctx.reply("⚠️ /verify only works in private chat.");
@@ -236,12 +101,35 @@ bot.command("verify", async (ctx) => {
   const result = verifyBindCode(code, userId, "telegram");
   if (result.success) {
     await ctx.reply(
-      `✅ Wallet linked!\n\nAddress: \`${result.address}\`\n\nYou can now trade here using the same wallet as your website/Twitter account.`,
+      `✅ Wallet linked!\n\n` +
+      `Address: \`${result.address}\`\n\n` +
+      `Unlock your wallet on the website, then trade here directly.`,
       { parse_mode: "Markdown" }
     );
   } else {
     await ctx.reply(`❌ ${result.error}`);
   }
+});
+
+// /wallet
+bot.command("wallet", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  const address = getWalletAddress("telegram", userId);
+  if (!address) {
+    await ctx.reply(REGISTER_MSG(SITE_URL));
+    return;
+  }
+
+  const active = await checkSession("telegram", userId);
+  await ctx.reply(
+    `💰 *Your Wallet*\n\n` +
+    `\`${address}\`\n` +
+    `Network: X Layer (Chain ID: 196)\n` +
+    `Status: ${active ? "🔓 Unlocked" : "🔒 Locked — unlock on website"}`,
+    { parse_mode: "Markdown" }
+  );
 });
 
 // /services
@@ -263,124 +151,16 @@ bot.command("services", async (ctx) => {
   }
 });
 
-// /stats
-bot.command("stats", async (ctx) => {
-  try {
-    const resp = await fetch(`${GATEWAY_URL}/stats`, { signal: AbortSignal.timeout(5000) });
-    const data = await resp.json() as any;
-    await ctx.reply(
-      `📊 *Stats*\n\nCalls: ${data.total_calls}\nRevenue: $${data.total_revenue_usd}\nUptime: ${Math.floor(data.uptime_seconds / 60)} min`,
-      { parse_mode: "Markdown" }
-    );
-  } catch {
-    await ctx.reply("❌ Gateway is offline.");
-  }
-});
-
-// All text messages
+// All messages → chat
 bot.on("message:text", async (ctx) => {
   if (ctx.chat?.type !== "private") return;
 
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
-  const text = ctx.message.text;
 
-  const waiting = waitingFor.get(userId);
-
-  // ── Handle password input for wallet setup ──
-  if (waiting?.state === "set_password") {
-    waitingFor.delete(userId);
-
-    const result = confirmWallet("telegram", userId, text);
-    if (!result.success) {
-      // Re-prompt
-      waitingFor.set(userId, { state: "set_password" });
-      await ctx.reply(`❌ ${result.error}\n\nPlease try again:`);
-      return;
-    }
-
-    // Delete the password message for security
-    try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
-
-    const address = getWalletAddress("telegram", userId);
-    await ctx.reply(
-      `✅ Wallet secured!\n\n` +
-      `Address: \`${address}\`\n\n` +
-      `Your private key is now encrypted with your password.\n` +
-      `Nobody — not even us — can access it without your password.\n\n` +
-      `Deposit OKB to \`${address}\` and start trading!`,
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-
-  // ── Handle password for unlock / trade confirmation ──
-  if (waiting?.state === "confirm_trade") {
-    waitingFor.delete(userId);
-
-    // Delete the password message
-    try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
-
-    // If no trade data, this is a /unlock request
-    if (!waiting.tradeData) {
-      const unlocked = unlockWallet("telegram", userId, text);
-      if (!unlocked) {
-        await ctx.reply("❌ Wrong password.");
-        return;
-      }
-      await setSession(userId, unlocked.privateKey, unlocked.address);
-      await ctx.reply("🔓 Wallet unlocked for permanent. Trade on Telegram or Twitter without password.\n\nUse /lock to lock immediately.");
-      return;
-    }
-
-    // Has trade data — unlock + execute
-    if (!(await checkSession(userId))) {
-      const unlocked = unlockWallet("telegram", userId, text);
-      if (!unlocked) {
-        await ctx.reply("❌ Wrong password. Trade cancelled.");
-        return;
-      }
-      await setSession(userId, unlocked.privateKey, unlocked.address);
-    }
-
-    await executeTradeFn(ctx, waiting.tradeData, userId);
-    return;
-  }
-
-  // ── Handle password for export ──
-  if (waiting?.state === "export") {
-    waitingFor.delete(userId);
-
-    const unlocked = unlockWallet("telegram", userId, text);
-
-    // Delete the password message
-    try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
-
-    if (!unlocked) {
-      await ctx.reply("❌ Wrong password.");
-      return;
-    }
-
-    await ctx.reply(
-      "🔐 *Your Private Key*\n\n" +
-      `\`${unlocked.privateKey}\`\n\n` +
-      `Address: \`${unlocked.address}\`\n` +
-      `Network: X Layer (Chain ID: 196)\n\n` +
-      "⚠️ Import into OKX Wallet or MetaMask.\n" +
-      "⚠️ Delete this message after saving!",
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-
-  // ── Regular message → chat with AgentNexus ──
+  // Not registered
   if (!isWalletReady("telegram", userId)) {
-    if (isWalletPending("telegram", userId)) {
-      waitingFor.set(userId, { state: "set_password" });
-      await ctx.reply("Please set your trading password first (min 6 chars):");
-      return;
-    }
-    await ctx.reply("Use /start to create your wallet first.");
+    await ctx.reply(REGISTER_MSG(SITE_URL));
     return;
   }
 
@@ -391,7 +171,7 @@ bot.on("message:text", async (ctx) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: text,
+        message: ctx.message.text,
         platform: "telegram",
         user_id: userId,
       }),
@@ -405,33 +185,18 @@ bot.on("message:text", async (ctx) => {
       return;
     }
 
-    // Check if a trade execution was attempted — need password confirmation
-    const hasTradeCall = data.calls_made?.some((c: string) =>
-      c.toLowerCase().includes("execute") || c.toLowerCase().includes("swap")
-    );
-    const tradeResult = data.results?.find((r: any) =>
-      r.service?.toLowerCase().includes("execute") || r.service?.toLowerCase().includes("swap")
-    );
-
-    if (hasTradeCall && tradeResult?.data?.needs_confirmation) {
-      const sessionActive = await checkSession(userId);
-
-      if (sessionActive) {
-        // Session active — execute immediately, no password needed
-        await executeTradeFn(ctx, tradeResult.data.trade_params, userId);
+    // Trade needs session
+    const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
+    if (tradeResult) {
+      const active = await checkSession("telegram", userId);
+      if (active) {
+        await executeTrade(ctx, tradeResult.data.trade_params, userId);
         return;
       }
-
-      // No session — ask for password
-      waitingFor.set(userId, {
-        state: "confirm_trade",
-        tradeData: tradeResult.data.trade_params,
-      });
       await ctx.reply(
         `📋 *Trade Preview*\n\n` +
         `${tradeResult.data.summary || "Ready to execute"}\n\n` +
-        `🔐 Enter your trading password to confirm:\n` +
-        `(or /unlock first for 15-min password-free trading)`,
+        `🔒 Wallet locked. Unlock on the website first:\n${SITE_URL}`,
         { parse_mode: "Markdown" }
       );
       return;
@@ -468,7 +233,7 @@ bot.start({
     console.log(`\n🤖 AgentNexus Telegram Bot running`);
     console.log(`   Bot: @${botInfo.username}`);
     console.log(`   Gateway: ${GATEWAY_URL}`);
-    console.log(`   Wallet security: AES-256-GCM encrypted\n`);
+    console.log(`   Register: ${SITE_URL}\n`);
   },
 });
 

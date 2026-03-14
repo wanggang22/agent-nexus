@@ -1,17 +1,16 @@
 import { TwitterApi } from "twitter-api-v2";
 import { env, verifyBindCode, getLinkedWallet, getLinkedTelegramId } from "shared";
 
-// ── Config ──
 const TWITTER_APP_KEY = process.env.TWITTER_APP_KEY || "";
 const TWITTER_APP_SECRET = process.env.TWITTER_APP_SECRET || "";
 const TWITTER_ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN || "";
 const TWITTER_ACCESS_SECRET = process.env.TWITTER_ACCESS_SECRET || "";
 const GATEWAY_URL = env.GATEWAY_URL;
-const POLL_INTERVAL = 30_000; // 30 seconds
+const SITE_URL = process.env.SITE_URL || "https://agent-nexus.up.railway.app";
+const POLL_INTERVAL = 30_000;
 
 if (!TWITTER_APP_KEY || !TWITTER_APP_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_SECRET) {
-  console.error("[TwitterBot] Missing Twitter API credentials in .env");
-  console.error("  Required: TWITTER_APP_KEY, TWITTER_APP_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET");
+  console.error("[TwitterBot] Missing Twitter API credentials");
   process.exit(1);
 }
 
@@ -22,16 +21,9 @@ const client = new TwitterApi({
   accessSecret: TWITTER_ACCESS_SECRET,
 });
 
-// Track last processed mention to avoid duplicates
 let lastMentionId: string | undefined;
-
-// Set of tweet IDs we've already replied to (prevent double-reply)
 const repliedTweets = new Set<string>();
-const MAX_REPLIED_CACHE = 5000;
 
-/**
- * Call AgentNexus Gateway /chat and get a response.
- */
 async function askAgentNexus(message: string, authorId?: string): Promise<string> {
   try {
     const resp = await fetch(`${GATEWAY_URL}/chat`, {
@@ -42,67 +34,44 @@ async function askAgentNexus(message: string, authorId?: string): Promise<string
     });
     const data = await resp.json() as any;
     if (data.error) return `Error: ${data.error}`;
-    return data.reply || "No response from agents.";
+    return data.reply || "No response.";
   } catch (e: any) {
     return `Service unavailable: ${e.message}`;
   }
 }
 
-/**
- * Split long text into tweet-sized chunks (280 chars).
- * Returns array of strings, each ≤ 280 chars.
- */
 function splitForTweets(text: string, maxLen = 270): string[] {
   if (text.length <= maxLen) return [text];
-
   const chunks: string[] = [];
   let remaining = text;
-  let part = 1;
-
   while (remaining.length > 0) {
     const isLast = remaining.length <= maxLen;
-    const chunkSize = isLast ? remaining.length : maxLen - 6; // leave room for " (1/3)"
-
-    // Try to break at sentence or word boundary
+    const chunkSize = isLast ? remaining.length : maxLen - 6;
     let breakAt = chunkSize;
     if (!isLast) {
-      const lastPeriod = remaining.lastIndexOf("。", chunkSize);
-      const lastDot = remaining.lastIndexOf(". ", chunkSize);
-      const lastNewline = remaining.lastIndexOf("\n", chunkSize);
-      const bestBreak = Math.max(lastPeriod, lastDot, lastNewline);
-      if (bestBreak > chunkSize * 0.5) breakAt = bestBreak + 1;
+      const best = Math.max(
+        remaining.lastIndexOf("。", chunkSize),
+        remaining.lastIndexOf(". ", chunkSize),
+        remaining.lastIndexOf("\n", chunkSize)
+      );
+      if (best > chunkSize * 0.5) breakAt = best + 1;
     }
-
-    const chunk = remaining.slice(0, breakAt).trim();
+    chunks.push(remaining.slice(0, breakAt).trim());
     remaining = remaining.slice(breakAt).trim();
-
-    if (isLast && chunks.length === 0) {
-      chunks.push(chunk);
-    } else {
-      const total = chunks.length + (remaining.length > 0 ? 2 : 1);
-      chunks.push(chunk); // will add numbering later
-      part++;
-    }
   }
-
-  // Add numbering if multiple chunks
   if (chunks.length > 1) {
     return chunks.map((c, i) => `${c} (${i + 1}/${chunks.length})`);
   }
   return chunks;
 }
 
-/**
- * Reply to a tweet. If response is too long, reply as a thread.
- */
 async function replyToTweet(tweetId: string, text: string) {
   const chunks = splitForTweets(text);
   let replyTo = tweetId;
-
   for (const chunk of chunks) {
     try {
       const posted = await client.v2.reply(chunk, replyTo);
-      replyTo = posted.data.id; // chain replies as thread
+      replyTo = posted.data.id;
     } catch (e: any) {
       console.error(`[TwitterBot] Failed to reply: ${e.message}`);
       break;
@@ -110,54 +79,40 @@ async function replyToTweet(tweetId: string, text: string) {
   }
 }
 
-/**
- * Poll for new @mentions and process them.
- */
 async function pollMentions() {
   try {
     const me = await client.v2.me();
     const myId = me.data.id;
     const myUsername = me.data.username;
 
-    console.log(`[TwitterBot] Polling mentions for @${myUsername}...`);
-
     const params: any = {
       max_results: 10,
-      "tweet.fields": ["author_id", "created_at", "text", "referenced_tweets"],
+      "tweet.fields": ["author_id", "created_at", "text"],
     };
     if (lastMentionId) params.since_id = lastMentionId;
 
     const mentions = await client.v2.userMentionTimeline(myId, params);
-
     if (!mentions.data?.data?.length) return;
 
-    // Process from oldest to newest
     const tweets = [...mentions.data.data].reverse();
 
     for (const tweet of tweets) {
-      // Skip if already replied
       if (repliedTweets.has(tweet.id)) continue;
-
-      // Skip our own tweets
       if (tweet.author_id === myId) continue;
 
-      // Extract the message (remove @mention)
-      const message = tweet.text
-        .replace(new RegExp(`@${myUsername}\\b`, "gi"), "")
-        .trim();
-
+      const message = tweet.text.replace(new RegExp(`@${myUsername}\\b`, "gi"), "").trim();
       if (!message) continue;
 
-      console.log(`[TwitterBot] Processing: "${message.slice(0, 50)}..." (tweet ${tweet.id})`);
+      console.log(`[TwitterBot] "${message.slice(0, 50)}..." (${tweet.id})`);
 
-      // Handle verify command — bind Twitter to Telegram wallet
+      // Handle verify — bind Twitter to website wallet
       const verifyMatch = message.match(/^verify\s+([A-Z0-9]{6})$/i);
       if (verifyMatch) {
-        const result = verifyBindCode(verifyMatch[1], tweet.author_id!);
+        const result = verifyBindCode(verifyMatch[1], tweet.author_id!, "twitter");
         if (result.success) {
-          await replyToTweet(tweet.id, `✅ Wallet linked! Your address: ${result.address}\n\nYou can now use @${myUsername} for analysis. Trading requires Telegram (unlock session).`);
+          await replyToTweet(tweet.id, `✅ Wallet linked: ${result.address?.slice(0, 10)}...\n\nUnlock at ${SITE_URL} then trade here!`);
         } else {
-          await replyToTweet(tweet.id, `❌ ${result.error}. Get a new code via Telegram /bindtwitter`);
+          await replyToTweet(tweet.id, `❌ ${result.error}. Get a new code at ${SITE_URL}`);
         }
         repliedTweets.add(tweet.id);
         lastMentionId = tweet.id;
@@ -165,41 +120,26 @@ async function pollMentions() {
         continue;
       }
 
-      // Check if message is a trade request
+      // Trade requests → check session, execute or redirect
       const isTradeRequest = /swap|buy|sell|trade|换|买|卖/i.test(message);
       if (isTradeRequest) {
         const wallet = getLinkedWallet(tweet.author_id!);
         if (!wallet) {
-          await replyToTweet(tweet.id, `To trade:\n1. Create wallet in Telegram @AgentNexusBot\n2. /bindtwitter to link\n3. /unlock to start`);
+          await replyToTweet(tweet.id, `Register first at ${SITE_URL} (Twitter login → create wallet → bind)`);
         } else {
-          // Check if Telegram session is active
-          const telegramId = getLinkedTelegramId(tweet.author_id!);
-          let sessionActive = false;
-          if (telegramId) {
-            try {
-              const resp = await fetch(`${GATEWAY_URL}/session/check/telegram/${telegramId}`, { signal: AbortSignal.timeout(3000) });
-              const data = await resp.json() as any;
-              sessionActive = !!data.active;
-            } catch {}
-          }
+          // Check session
+          let active = false;
+          try {
+            const resp = await fetch(`${GATEWAY_URL}/session/check/twitter/${tweet.author_id}`, { signal: AbortSignal.timeout(3000) });
+            const data = await resp.json() as any;
+            active = !!data.active;
+          } catch {}
 
-          if (sessionActive && telegramId) {
-            // Session active — execute trade via Gateway using shared session
-            try {
-              // Parse trade intent from message
-              const chatResp = await fetch(`${GATEWAY_URL}/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message, platform: "telegram", user_id: telegramId }),
-                signal: AbortSignal.timeout(30000),
-              });
-              const chatData = await chatResp.json() as any;
-              await replyToTweet(tweet.id, chatData.reply || "Trade processed. Check Telegram for details.");
-            } catch {
-              await replyToTweet(tweet.id, `Trade failed. Try again or use Telegram.`);
-            }
+          if (active) {
+            const response = await askAgentNexus(message, tweet.author_id);
+            await replyToTweet(tweet.id, response);
           } else {
-            await replyToTweet(tweet.id, `Wallet linked (${wallet.slice(0, 6)}...${wallet.slice(-4)}) but session expired. /unlock in Telegram first, then tweet again.`);
+            await replyToTweet(tweet.id, `Wallet locked. Unlock at ${SITE_URL} first, then tweet again.`);
           }
         }
         repliedTweets.add(tweet.id);
@@ -208,26 +148,19 @@ async function pollMentions() {
         continue;
       }
 
-      // Regular analysis/signals — free, no wallet needed
+      // Analysis/signals — free, no wallet needed
       const response = await askAgentNexus(message, tweet.author_id);
-
       await replyToTweet(tweet.id, response);
 
-      // Track
       repliedTweets.add(tweet.id);
       lastMentionId = tweet.id;
-
-      // Keep cache bounded
-      if (repliedTweets.size > MAX_REPLIED_CACHE) {
+      if (repliedTweets.size > 5000) {
         const first = repliedTweets.values().next().value;
         if (first) repliedTweets.delete(first);
       }
-
-      // Rate limit: wait 2s between replies
       await new Promise((r) => setTimeout(r, 2000));
     }
   } catch (e: any) {
-    // Rate limit handling
     if (e.code === 429 || e.message?.includes("429")) {
       console.warn("[TwitterBot] Rate limited, waiting 60s...");
       await new Promise((r) => setTimeout(r, 60000));
@@ -237,30 +170,23 @@ async function pollMentions() {
   }
 }
 
-// ── Main loop ──
 async function main() {
   try {
     const me = await client.v2.me();
     console.log(`\n🐦 AgentNexus Twitter Bot running`);
     console.log(`   Account: @${me.data.username}`);
     console.log(`   Gateway: ${GATEWAY_URL}`);
-    console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
-    console.log(`   Tweet @${me.data.username} to interact!\n`);
+    console.log(`   Register: ${SITE_URL}\n`);
   } catch (e: any) {
-    console.error(`[TwitterBot] Failed to authenticate: ${e.message}`);
-    console.error("  Check your Twitter API credentials in .env");
+    console.error(`[TwitterBot] Auth failed: ${e.message}`);
     process.exit(1);
   }
 
-  // Initial poll
   await pollMentions();
-
-  // Poll loop
   setInterval(pollMentions, POLL_INTERVAL);
 }
 
 main();
 
-// Graceful shutdown
 process.on("SIGTERM", () => { console.log("\n[TwitterBot] Shutting down..."); process.exit(0); });
 process.on("SIGINT", () => { console.log("\n[TwitterBot] Shutting down..."); process.exit(0); });
