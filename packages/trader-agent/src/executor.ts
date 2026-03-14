@@ -116,42 +116,34 @@ export async function getQuote(
  * @param maxSlippage - Max slippage. "auto" = auto-detect, or "5" for 5%
  */
 /**
- * Execute a trade via OKX DEX aggregator.
- * If userPrivateKey is provided, uses the user's wallet. Otherwise uses the platform wallet.
+ * Build trade transaction data WITHOUT signing.
+ * Returns the raw tx params (to, data, value, gas) for the caller to sign.
+ * Private keys never touch this service.
  */
-export async function executeTrade(
+export async function buildTrade(
   fromToken: string,
   toToken: string,
   amount: string,
+  walletAddress: string,
   chain = "xlayer",
-  maxSlippage = "auto",
-  userPrivateKey?: string
+  maxSlippage = "auto"
 ) {
-  // Determine which wallet to use
-  const tradeAccount = userPrivateKey
-    ? privateKeyToAccount(userPrivateKey as `0x${string}`)
-    : account;
-
-  const tradeWalletClient = userPrivateKey
-    ? createWalletClient({ account: tradeAccount, chain: xlayer, transport: http(env.XLAYER_RPC) })
-    : walletClient;
-
-  // First get a quote to determine price impact for auto slippage
+  // Get quote for slippage
   const quote = await getQuote(fromToken, toToken, amount, chain, maxSlippage);
   const slippageNum = parseFloat(quote.slippage) || 1;
 
-  // OKX DEX aggregator builds the swap tx with slippage protection
+  // OKX DEX aggregator builds the swap tx
   const swapRaw = runOnchainos(
-    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${tradeAccount.address} --slippage ${slippageNum}`
+    `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${walletAddress} --slippage ${slippageNum}`
   );
 
   if (!swapRaw) {
-    return { success: false, error: "Failed to get swap data from OKX DEX aggregator", order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: "Failed to get swap data from OKX DEX aggregator", tx: null };
   }
 
   const swapData = safeJsonParse(swapRaw);
   if (!swapData?.data) {
-    return { success: false, error: "Invalid swap data", order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: "Invalid swap data", tx: null };
   }
 
   const txData = swapData.data[0] || swapData.data;
@@ -160,53 +152,71 @@ export async function executeTrade(
   const value = txData.tx?.value || txData.value || "0";
 
   if (!to || !data) {
-    return { success: false, error: "Missing transaction target or calldata", order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: "Missing transaction target or calldata", tx: null };
   }
 
-  // Step 1: Simulate transaction before sending
+  // Simulate
   const simRaw = runOnchainos(
-    `gateway simulate --from ${tradeAccount.address} --to ${to} --data ${data} --chain ${chain}`
+    `gateway simulate --from ${walletAddress} --to ${to} --data ${data} --chain ${chain}`
   );
   if (simRaw && simRaw.includes("fail")) {
-    return { success: false, error: "Transaction simulation failed — trade would revert", order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: "Transaction simulation failed — trade would revert", tx: null };
   }
 
-  // Step 2: Estimate gas
-  let gasEstimate: bigint | undefined;
+  // Estimate gas
+  let gasEstimate: string | undefined;
   try {
-    gasEstimate = await publicClient.estimateGas({
-      account: tradeAccount.address,
+    const gas = await publicClient.estimateGas({
+      account: walletAddress as `0x${string}`,
       to: to as `0x${string}`,
       data: data as `0x${string}`,
       value: BigInt(value),
     });
+    gasEstimate = (gas * 120n / 100n).toString(); // 20% buffer
   } catch (e: any) {
-    return { success: false, error: `Gas estimation failed: ${e.message}`, order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: `Gas estimation failed: ${e.message}`, tx: null };
   }
 
-  // Step 3: Send transaction
-  try {
-    const txHash = await tradeWalletClient.sendTransaction({
-      to: to as `0x${string}`,
-      data: data as `0x${string}`,
-      value: BigInt(value),
-      gas: gasEstimate ? gasEstimate * 120n / 100n : undefined, // 20% buffer
-    });
+  return {
+    success: true,
+    tx: { to, data, value, gas: gasEstimate, chain_id: 196 },
+    quote,
+  };
+}
 
-    const orderId = generateId().replace("quote_", "order_");
+/**
+ * Legacy execute — uses platform wallet (for backward compat / testing only).
+ */
+export async function executeTrade(
+  fromToken: string,
+  toToken: string,
+  amount: string,
+  chain = "xlayer",
+  maxSlippage = "auto"
+) {
+  const build = await buildTrade(fromToken, toToken, amount, account.address, chain, maxSlippage);
+  if (!build.success || !build.tx) {
+    return { success: false, error: build.error, order_id: null };
+  }
+
+  try {
+    const txHash = await walletClient.sendTransaction({
+      to: build.tx.to as `0x${string}`,
+      data: build.tx.data as `0x${string}`,
+      value: BigInt(build.tx.value),
+      gas: build.tx.gas ? BigInt(build.tx.gas) : undefined,
+    });
 
     return {
       success: true,
       tx_hash: txHash,
-      order_id: orderId,
-      wallet: tradeAccount.address,
+      order_id: generateId().replace("quote_", "order_"),
       chain,
-      slippage: quote.slippage,
-      gas_estimate: gasEstimate?.toString(),
+      slippage: build.quote?.slippage,
       explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
     };
   } catch (e: any) {
-    return { success: false, error: e.message, order_id: null, wallet: tradeAccount.address };
+    return { success: false, error: e.message, order_id: null };
   }
 }
 

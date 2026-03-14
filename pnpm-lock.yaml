@@ -133,6 +133,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      viem:
+        specifier: ^2.21.0
+        version: 2.47.2(typescript@5.9.3)
     devDependencies:
       '@types/cors':
         specifier: ^2.8.17

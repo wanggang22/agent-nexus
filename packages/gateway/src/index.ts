@@ -1,9 +1,12 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
-import { env, resolveToken, registerToken, getOrCreateWallet, getWalletStats } from "shared";
+import { env, resolveToken, registerToken, getOrCreateWallet, getWalletStats, xlayer } from "shared";
+import { createWalletClient, createPublicClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Gateway";
+const PORT = parseInt(process.env.PORT || "4000");
 
 // Service URLs — configurable for Railway internal networking
 const SIGNAL_URL = process.env.SIGNAL_URL || "http://localhost:4001";
@@ -197,6 +200,59 @@ app.get("/wallet/:platform/:userId", (req, res) => {
   });
 });
 
+// Sign and send trade — private key never leaves Gateway
+app.post("/trade/user-execute", async (req, res) => {
+  const { from_token, to_token, amount, chain, slippage, platform, user_id } = req.body;
+  if (!from_token || !to_token || !amount || !platform || !user_id) {
+    return res.status(400).json({ error: "from_token, to_token, amount, platform, user_id required" });
+  }
+
+  // Get user wallet — private key stays here
+  const wallet = getOrCreateWallet(platform, user_id);
+
+  try {
+    // Step 1: Ask Trader Agent to BUILD unsigned tx (no private key sent)
+    const buildResp = await fetch(`${TRADER_URL}/trade/build`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from_token, to_token, amount, wallet_address: wallet.address, chain, slippage }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const buildResult = await buildResp.json() as any;
+
+    if (!buildResult.success || !buildResult.tx) {
+      return res.json({ success: false, error: buildResult.error || "Failed to build transaction", wallet: wallet.address });
+    }
+
+    // Step 2: Sign and send locally — private key never leaves this process
+    const userAccount = privateKeyToAccount(wallet.privateKey as `0x${string}`);
+    const userWalletClient = createWalletClient({
+      account: userAccount,
+      chain: xlayer,
+      transport: http(env.XLAYER_RPC),
+    });
+
+    const tx = buildResult.tx;
+    const txHash = await userWalletClient.sendTransaction({
+      to: tx.to as `0x${string}`,
+      data: tx.data as `0x${string}`,
+      value: BigInt(tx.value || "0"),
+      gas: tx.gas ? BigInt(tx.gas) : undefined,
+    });
+
+    res.json({
+      success: true,
+      tx_hash: txHash,
+      wallet: wallet.address,
+      chain: chain || "xlayer",
+      slippage: buildResult.quote?.slippage,
+      explorer: `https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
+    });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message, wallet: wallet.address });
+  }
+});
+
 app.get("/wallet-stats", (_req, res) => {
   res.json(getWalletStats());
 });
@@ -285,10 +341,23 @@ app.post("/chat", async (req, res) => {
                 (body as any)[k] = resolvedTokens[v];
               }
             }
-            // Inject user wallet for trade execution
-            if (userWallet && call.agent === "trader" && path.includes("/execute")) {
-              (body as any).user_private_key = userWallet.privateKey;
-            }
+          }
+
+          // For trade execution with user wallet: use Gateway's local signing
+          if (userWallet && call.agent === "trader" && path.includes("/execute")) {
+            // Redirect to Gateway's own /trade/user-execute (signs locally, key never leaves)
+            const execResp = await fetch(`http://localhost:${PORT}/trade/user-execute`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...body,
+                platform,
+                user_id,
+              }),
+              signal: AbortSignal.timeout(20000),
+            });
+            const execData = await execResp.json();
+            return { service: call.description, status: execResp.status, data: execData };
           }
 
           const url = `${baseUrl}${path}`;
@@ -410,7 +479,6 @@ app.get("/stats", (_req, res) => {
   });
 });
 
-const PORT = parseInt(process.env.PORT || "4000");
 const server = app.listen(PORT, () => {
   console.log(`\n🌐 AgentNexus Gateway running on http://localhost:${PORT}`);
   console.log(`💬 Natural language: POST http://localhost:${PORT}/chat`);

@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { getQuote, executeTrade, getOrderStatus, getWalletAddress } from "./executor.js";
+import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress } from "./executor.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Trader Agent";
@@ -36,13 +36,29 @@ app.post("/trade/quote", async (req, res) => {
   }
 });
 
+// Build unsigned transaction — no private keys needed
+app.post("/trade/build", async (req, res) => {
+  try {
+    const { from_token, to_token, amount, wallet_address, chain, slippage } = req.body;
+    if (!from_token || !to_token || !amount || !wallet_address) {
+      return res.status(400).json({ error: "from_token, to_token, amount, and wallet_address required" });
+    }
+    const result = await buildTrade(from_token, to_token, amount, wallet_address, chain, slippage);
+    recordCall(AGENT, "build", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Legacy execute — uses platform wallet only (for testing)
 app.post("/trade/execute", async (req, res) => {
   try {
-    const { from_token, to_token, amount, chain, slippage, user_private_key } = req.body;
+    const { from_token, to_token, amount, chain, slippage } = req.body;
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const result = await executeTrade(from_token, to_token, amount, chain, slippage, user_private_key);
+    const result = await executeTrade(from_token, to_token, amount, chain, slippage);
     recordCall(AGENT, "execute", 0);
     res.json(result);
   } catch (e: any) {
