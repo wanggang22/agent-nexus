@@ -233,7 +233,7 @@ async function aiAnalyze(data: Record<string, string>, analysisType: string, cac
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   const msg = await client.messages.create({
-    model: "claude-sonnet-4-5-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: analysisType === "meme" ? 600 : 400,
     messages: [
       {

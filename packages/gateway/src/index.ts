@@ -357,7 +357,7 @@ app.post("/chat", async (req, res) => {
     // Step 1: Parse intent with Claude
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const intentMsg = await client.messages.create({
-      model: "claude-sonnet-4-5-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 300,
       messages: [{ role: "user", content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY JSON.` }],
     });
@@ -465,7 +465,7 @@ app.post("/chat", async (req, res) => {
       : "";
 
     const summaryMsg = await client.messages.create({
-      model: "claude-sonnet-4-5-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 400,
       messages: [{
         role: "user",
