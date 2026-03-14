@@ -33,6 +33,7 @@ bot.command("start", async (ctx) => {
       '• "最近聪明钱在买什么" — smart money signals\n\n' +
       "Commands:\n" +
       "/wallet — Show your wallet address\n" +
+      "/export — Export private key (backup)\n" +
       "/services — List all services\n" +
       "/stats — Platform statistics",
       { parse_mode: "Markdown" }
@@ -58,6 +59,36 @@ bot.command("wallet", async (ctx) => {
       `Address: \`${wallet.address}\`\n\n` +
       `Deposit OKB (gas) and tokens to this address to trade.\n` +
       `Network: X Layer Mainnet (Chain ID: 196)`,
+      { parse_mode: "Markdown" }
+    );
+  } catch {
+    await ctx.reply("❌ Gateway is offline.");
+  }
+});
+
+// /export command — export private key (DM only)
+bot.command("export", async (ctx) => {
+  // Only allow in private chat, never in groups
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("⚠️ This command only works in private chat for security.");
+    return;
+  }
+
+  const userId = ctx.from?.id?.toString();
+  if (!userId) return;
+
+  try {
+    const resp = await fetch(`${GATEWAY_URL}/wallet/telegram/${userId}?export=true`, { signal: AbortSignal.timeout(5000) });
+    const wallet = await resp.json() as any;
+
+    await ctx.reply(
+      "🔐 *Your Private Key (KEEP SECRET!)*\n\n" +
+      `\`${wallet.private_key}\`\n\n` +
+      `Address: \`${wallet.address}\`\n` +
+      `Network: X Layer Mainnet (Chain ID: 196)\n\n` +
+      "⚠️ Import this into OKX Wallet or MetaMask to access your funds directly.\n" +
+      "⚠️ NEVER share this key with anyone!\n" +
+      "⚠️ Delete this message after saving the key.",
       { parse_mode: "Markdown" }
     );
   } catch {

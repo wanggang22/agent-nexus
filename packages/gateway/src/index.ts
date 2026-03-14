@@ -183,11 +183,14 @@ app.get("/wallet/:platform/:userId", (req, res) => {
     return res.status(400).json({ error: "platform must be telegram, twitter, or api" });
   }
   const wallet = getOrCreateWallet(platform as any, userId);
+  // Only include private_key if explicitly requested (for export)
+  const includeKey = req.query.export === "true";
   res.json({
     address: wallet.address,
     is_new: wallet.isNew,
     platform,
     user_id: userId,
+    ...(includeKey ? { private_key: wallet.privateKey } : {}),
     deposit_info: wallet.isNew
       ? `Wallet created! Deposit OKB or tokens to ${wallet.address} to start trading on X Layer.`
       : undefined,
