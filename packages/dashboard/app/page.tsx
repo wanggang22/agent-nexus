@@ -83,7 +83,17 @@ export default function Dashboard() {
   const [dataLoading, setDataLoading] = useState(false);
 
   // ── Token Chats (per-token conversation context) ──
-  const [tokenChats, setTokenChats] = useState<Map<string, TokenChat>>(new Map());
+  const [tokenChats, setTokenChats] = useState<Map<string, TokenChat>>(() => {
+    if (typeof window === "undefined") return new Map();
+    try {
+      const saved = localStorage.getItem("agentnexus_chats");
+      if (saved) {
+        const arr: [string, TokenChat][] = JSON.parse(saved);
+        return new Map(arr);
+      }
+    } catch {}
+    return new Map();
+  });
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -101,6 +111,14 @@ export default function Dashboard() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [tokenChats, chatLoading]);
+
+  // Persist token chats to localStorage
+  useEffect(() => {
+    try {
+      const arr = Array.from(tokenChats.entries());
+      if (arr.length > 0) localStorage.setItem("agentnexus_chats", JSON.stringify(arr));
+    } catch {}
+  }, [tokenChats]);
 
   // ── Get current token from activeView ──
   const currentTokenSymbol = activeView.startsWith("token:") ? activeView.split(":")[1] : null;
