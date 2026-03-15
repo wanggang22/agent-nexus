@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import {
   createLocalWallet, saveWallet, getLocalWallet,
   unlockLocalWallet, signTransaction, hasLocalWallet, importWallet,
+  syncToServer, syncFromServer,
 } from "./wallet";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
@@ -35,11 +36,19 @@ export default function Dashboard() {
   // Pending trade data
   const [pendingTrade, setPendingTrade] = useState<any>(null);
 
-  // Load wallet from localStorage on mount
+  // Load wallet: try localStorage first, then sync from server
   useEffect(() => {
     if (!twitterId) return;
+
     const local = getLocalWallet();
-    if (local) setWallet(local.address);
+    if (local) {
+      setWallet(local.address);
+    } else {
+      // No local wallet — try to pull from server (cross-device sync)
+      syncFromServer(GATEWAY, "twitter", twitterId).then((result) => {
+        if (result) setWallet(result.address);
+      });
+    }
 
     fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
   }, [twitterId]);
@@ -61,6 +70,8 @@ export default function Dashboard() {
 
     const saved = await saveWallet(wallet, privateKeyRef.current, password);
     if (saved) {
+      // Sync encrypted blob to server for cross-device access
+      await syncToServer(GATEWAY, "twitter", twitterId);
       setPasswordMode(null);
       setPassword("");
       setUnlocked(true);
@@ -96,6 +107,7 @@ export default function Dashboard() {
     if (!importKey.startsWith("0x")) { alert("Private key must start with 0x"); return; }
     const result = await importWallet(importKey, password);
     if (result) {
+      await syncToServer(GATEWAY, "twitter", twitterId);
       setWallet(result.address);
       privateKeyRef.current = importKey;
       setUnlocked(true);

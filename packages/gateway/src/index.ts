@@ -337,6 +337,24 @@ app.post("/trade/sign-and-send", async (req, res) => {
   }
 });
 
+// ── Cloud wallet sync: store encrypted blobs (server never has password/key) ──
+const encryptedWallets = new Map<string, string>(); // "twitter_123" → encrypted JSON blob
+
+app.post("/wallet/sync", (req, res) => {
+  const { platform, user_id, encrypted_wallet } = req.body;
+  if (!platform || !user_id || !encrypted_wallet) {
+    return res.status(400).json({ error: "platform, user_id, encrypted_wallet required" });
+  }
+  encryptedWallets.set(`${platform}_${user_id}`, encrypted_wallet);
+  res.json({ success: true });
+});
+
+app.get("/wallet/sync/:platform/:userId", (req, res) => {
+  const key = `${req.params.platform}_${req.params.userId}`;
+  const blob = encryptedWallets.get(key);
+  res.json({ encrypted_wallet: blob || null });
+});
+
 app.get("/wallet-stats", (_req, res) => {
   res.json(getWalletStats());
 });

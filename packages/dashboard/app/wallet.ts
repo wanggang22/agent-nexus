@@ -167,3 +167,43 @@ export async function importWallet(privateKey: string, password: string): Promis
     return null;
   }
 }
+
+// ── Cloud sync: store encrypted blob on server for cross-device access ──
+
+/**
+ * Upload encrypted wallet to server. Server only gets the ciphertext, never the password or key.
+ */
+export async function syncToServer(gatewayUrl: string, platform: string, userId: string): Promise<boolean> {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return false;
+  try {
+    const resp = await fetch(`${gatewayUrl}/wallet/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform, user_id: userId, encrypted_wallet: raw }),
+    });
+    const data = await resp.json();
+    return !!data.success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download encrypted wallet from server and save to localStorage.
+ * Returns wallet address if found, null if no wallet on server.
+ */
+export async function syncFromServer(gatewayUrl: string, platform: string, userId: string): Promise<{ address: string } | null> {
+  try {
+    const resp = await fetch(`${gatewayUrl}/wallet/sync/${platform}/${userId}`);
+    const data = await resp.json();
+    if (!data.encrypted_wallet) return null;
+
+    // Save encrypted blob to localStorage (still encrypted, no password needed)
+    localStorage.setItem(STORAGE_KEY, data.encrypted_wallet);
+    const parsed = JSON.parse(data.encrypted_wallet);
+    return { address: parsed.address };
+  } catch {
+    return null;
+  }
+}
