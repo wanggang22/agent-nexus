@@ -232,11 +232,73 @@ app.get("/health", (_req, res) => {
   res.json({ bot: "twitter", status: "online" });
 });
 
+// ── Filtered Stream: auto-reply to mentions (free tier, 1 rule) ──
+async function setupStream(myUsername: string, myId: string) {
+  try {
+    // Delete existing rules
+    const existingRules = await client.v2.streamRules();
+    if (existingRules.data?.length) {
+      await client.v2.updateStreamRules({
+        delete: { ids: existingRules.data.map(r => r.id) },
+      });
+    }
+
+    // Add rule to match mentions of our bot
+    await client.v2.updateStreamRules({
+      add: [{ value: `@${myUsername}`, tag: "mentions" }],
+    });
+    console.log(`[TwitterBot] Stream rule set: @${myUsername}`);
+
+    // Connect to stream
+    const stream = await client.v2.searchStream({
+      "tweet.fields": ["author_id", "text", "conversation_id"],
+    });
+
+    stream.autoReconnect = true;
+    stream.autoReconnectRetries = Infinity;
+
+    stream.on("data", async (event: any) => {
+      const tweet = event.data;
+      if (!tweet || tweet.author_id === myId) return;
+      if (repliedTweets.has(tweet.id)) return;
+
+      const message = tweet.text.replace(new RegExp(`@${myUsername}\\b`, "gi"), "").trim();
+      if (!message) return;
+
+      console.log(`[TwitterBot] Stream: "${message.slice(0, 50)}..." (${tweet.id})`);
+
+      try {
+        const response = await askAgentNexus(message, tweet.author_id);
+        await replyToTweet(tweet.id, response);
+        repliedTweets.add(tweet.id);
+        console.log(`[TwitterBot] Replied to ${tweet.id}`);
+      } catch (e: any) {
+        console.error(`[TwitterBot] Reply failed: ${e.message}`);
+      }
+    });
+
+    stream.on("error", (err: any) => {
+      console.error(`[TwitterBot] Stream error: ${err.message}`);
+    });
+
+    console.log("[TwitterBot] Filtered stream connected — listening for mentions...");
+  } catch (e: any) {
+    console.error(`[TwitterBot] Stream setup failed: ${e.message}`);
+    // Fallback to polling (will also fail on free tier)
+    console.log("[TwitterBot] Falling back to polling...");
+    setInterval(pollMentions, POLL_INTERVAL);
+  }
+}
+
 async function main() {
+  let myUsername = "AgentNexus_AI";
+  let myId = "";
   try {
     const me = await client.v2.me();
+    myUsername = me.data.username;
+    myId = me.data.id;
     console.log(`\n🐦 AgentNexus Twitter Bot running`);
-    console.log(`   Account: @${me.data.username}`);
+    console.log(`   Account: @${myUsername}`);
     console.log(`   Gateway: ${GATEWAY_URL}`);
     console.log(`   Register: ${SITE_URL}`);
     console.log(`   Manual: POST /reply, /tweet, /analyze-and-tweet\n`);
@@ -248,9 +310,8 @@ async function main() {
   const PORT = parseInt(process.env.PORT || "8080");
   app.listen(PORT, () => console.log(`   HTTP server on :${PORT}\n`));
 
-  // Still try polling (will fail on free tier but won't crash)
-  await pollMentions();
-  setInterval(pollMentions, POLL_INTERVAL);
+  // Use Filtered Stream (free tier supports 1 rule) instead of polling
+  await setupStream(myUsername, myId);
 }
 
 main();
