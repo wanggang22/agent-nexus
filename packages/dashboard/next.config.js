@@ -1,8 +1,11 @@
-const { config } = require("dotenv");
 const path = require("path");
 
-// Load .env from monorepo root
-config({ path: path.resolve(__dirname, "../../.env") });
+// Load .env from monorepo root (local dev only)
+try {
+  require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+} catch {
+  // dotenv not available in production — Railway sets env vars directly
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
