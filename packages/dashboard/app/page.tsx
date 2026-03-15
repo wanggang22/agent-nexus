@@ -432,8 +432,12 @@ export default function Dashboard() {
       try {
         const text = await resp.text();
         data = JSON.parse(text);
-      } catch {
-        data = { reply: "AI is processing... please try again." };
+      } catch (parseErr: any) {
+        data = { reply: lang === "zh" ? "AI 正在处理中，请重试。" : "AI is processing... please try again." };
+      }
+      // Prevent error messages from being stored as chat
+      if (data.reply && data.reply.includes("Expected '")) {
+        data.reply = lang === "zh" ? "AI 返回数据异常，请重试。" : "AI response error, please retry.";
       }
 
       // Check for trade

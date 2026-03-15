@@ -578,8 +578,8 @@ app.post("/chat", async (req, res) => {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const intentMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 300,
-      messages: [{ role: "user", content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY JSON.` }],
+      max_tokens: 600,
+      messages: [{ role: "user", content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY compact JSON, no whitespace.` }],
     });
 
     const intentText = intentMsg.content[0].type === "text" ? intentMsg.content[0].text : "{}";
@@ -588,7 +588,14 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "Could not understand your request", raw: intentText });
     }
 
-    const intent = JSON.parse(jsonMatch[0]);
+    let intent: any;
+    try {
+      intent = JSON.parse(jsonMatch[0]);
+    } catch {
+      // Claude's JSON was truncated — try to salvage what we can
+      console.warn("[Gateway] Intent JSON parse failed, using fallback");
+      intent = { calls: [], reply: "Let me try a simpler approach." };
+    }
     const calls: Array<{ agent: string; method: string; path: string; tokens?: string[]; body?: any; description: string }> = intent.calls || [];
 
     if (calls.length === 0) {
