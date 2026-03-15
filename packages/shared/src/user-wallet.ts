@@ -5,7 +5,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WALLET_FILE = path.resolve(__dirname, "../../../.user-wallets.json");
+// Use persistent volume path if available (Railway), otherwise project root
+const WALLET_DIR = process.env.WALLET_STORAGE_PATH || path.resolve(__dirname, "../../..");
+const WALLET_FILE = path.resolve(WALLET_DIR, ".user-wallets.json");
 
 interface StoredWallet {
   address: string;
@@ -145,11 +147,14 @@ export function confirmWallet(
   };
   save();
 
+  // Return private key ONE LAST TIME for user backup
+  const privateKeyForBackup = pending.privateKey;
+
   // Clear plaintext from memory
   pendingSetup.delete(key);
   console.log(`[UserWallet] Wallet confirmed for ${key}: ${pending.address}`);
 
-  return { success: true };
+  return { success: true, privateKey: privateKeyForBackup };
 }
 
 /**

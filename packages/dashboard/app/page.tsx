@@ -16,6 +16,8 @@ export default function Dashboard() {
   const [password, setPassword] = useState("");
   const [passwordMode, setPasswordMode] = useState<"set" | "unlock" | null>(null);
   const [walletPending, setWalletPending] = useState(false);
+  const [backupKey, setBackupKey] = useState<string | null>(null); // shown once after creation
+  const [backupConfirmed, setBackupConfirmed] = useState(false);
 
   // Chat
   const [chatInput, setChatInput] = useState("");
@@ -81,7 +83,10 @@ export default function Dashboard() {
         setWalletPending(false);
         setPasswordMode(null);
         setPassword("");
-        alert("Wallet secured! Deposit OKB to start trading.");
+        // Show private key for backup — this is the ONLY time it's shown
+        if (data.privateKey) {
+          setBackupKey(data.privateKey);
+        }
       } else {
         alert(data.error || "Failed to set password");
       }
@@ -191,6 +196,41 @@ export default function Dashboard() {
   // ── Logged in ──
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto">
+      {/* Private Key Backup Modal */}
+      {backupKey && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="card max-w-lg w-full">
+            <h2 className="text-xl font-bold text-nexus-yellow mb-3">Save Your Private Key!</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              This is the <strong>ONLY</strong> time your private key will be shown.
+              Copy it and store it safely. If you lose it and forget your password, your funds are gone forever.
+            </p>
+            <div className="bg-nexus-bg p-3 rounded font-mono text-sm text-nexus-accent break-all mb-4 select-all">
+              {backupKey}
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              You can import this key into OKX Wallet or MetaMask to access your wallet directly.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-gray-300 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={backupConfirmed}
+                onChange={(e) => setBackupConfirmed(e.target.checked)}
+                className="rounded"
+              />
+              I have saved my private key in a safe place
+            </label>
+            <button
+              onClick={() => { setBackupKey(null); setBackupConfirmed(false); }}
+              disabled={!backupConfirmed}
+              className="w-full bg-nexus-accent text-black py-2 rounded-lg font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              I've Saved It — Continue
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
