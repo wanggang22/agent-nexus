@@ -88,10 +88,13 @@ export default function Dashboard() {
     try {
       const saved = localStorage.getItem("agentnexus_chats");
       if (saved) {
-        const arr: [string, TokenChat][] = JSON.parse(saved);
-        return new Map(arr);
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) return new Map(arr);
       }
-    } catch {}
+    } catch {
+      // Corrupted data — clear it
+      localStorage.removeItem("agentnexus_chats");
+    }
     return new Map();
   });
   const [chatInput, setChatInput] = useState("");
@@ -441,15 +444,17 @@ export default function Dashboard() {
   useEffect(() => {
     if (!userId) return;
     fetch(`${GATEWAY}/chats/load/${userId}`).then(r => r.json()).then(data => {
-      if (data.chats && Array.isArray(data.chats) && data.chats.length > 0) {
-        const serverChats = new Map<string, TokenChat>(data.chats);
-        setTokenChats(prev => {
-          if (prev.size === 0) return serverChats;
-          const merged = new Map(serverChats);
-          for (const [k, v] of prev) merged.set(k, v);
-          return merged;
-        });
-      }
+      try {
+        if (data.chats && Array.isArray(data.chats) && data.chats.length > 0) {
+          const serverChats = new Map<string, TokenChat>(data.chats);
+          setTokenChats(prev => {
+            if (prev.size === 0) return serverChats;
+            const merged = new Map(serverChats);
+            for (const [k, v] of prev) merged.set(k, v);
+            return merged;
+          });
+        }
+      } catch {}
     }).catch(() => {});
   }, [userId]);
 
