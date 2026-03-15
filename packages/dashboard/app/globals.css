@@ -2,32 +2,135 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1a1a2e #06060b;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: #06060b;
+}
+*::-webkit-scrollbar-thumb {
+  background: #1a1a2e;
+  border-radius: 3px;
+}
+
 body {
-  background-color: #0a0a0f;
+  background-color: #06060b;
   color: #e2e8f0;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* ── Cards ── */
 .card {
-  @apply bg-nexus-card border border-nexus-border rounded-xl p-5;
+  @apply bg-nexus-card border border-nexus-border rounded-2xl p-5 transition-all duration-300;
+}
+.card:hover {
+  @apply border-nexus-border-hover bg-nexus-card-hover;
 }
 
-.stat-value {
-  @apply text-3xl font-bold text-white;
+.card-glass {
+  @apply rounded-2xl p-5 transition-all duration-300;
+  background: rgba(13, 13, 21, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(26, 26, 46, 0.6);
 }
 
-.stat-label {
-  @apply text-sm text-gray-400 mt-1;
-}
-
+/* ── Status indicators ── */
 .agent-online {
   @apply inline-block w-2 h-2 rounded-full bg-nexus-green mr-2;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
-
 .agent-offline {
   @apply inline-block w-2 h-2 rounded-full bg-nexus-red mr-2;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
+/* ── Tags ── */
 .price-tag {
-  @apply inline-block bg-nexus-accent/20 text-nexus-accent px-2 py-0.5 rounded text-xs font-mono;
+  @apply inline-block bg-nexus-accent/15 text-nexus-accent-light px-2.5 py-1 rounded-lg text-xs font-mono;
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  @apply bg-nexus-accent hover:bg-nexus-accent/85 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+}
+.btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  @apply bg-nexus-card border border-nexus-border text-white py-3 px-6 rounded-xl text-sm transition-all duration-200;
+}
+.btn-secondary:hover {
+  @apply border-nexus-accent/50 bg-nexus-card-hover;
+}
+
+.btn-ghost {
+  @apply text-nexus-muted hover:text-white text-sm transition-colors duration-200;
+}
+
+/* ── Input ── */
+.input {
+  @apply w-full bg-nexus-bg border border-nexus-border text-white p-3 rounded-xl text-sm transition-all duration-200;
+  @apply focus:outline-none focus:border-nexus-accent/60 focus:ring-1 focus:ring-nexus-accent/30;
+}
+
+/* ── Gradient text ── */
+.text-gradient {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glow effects ── */
+.glow-border {
+  position: relative;
+}
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.3), transparent 60%);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.glow-border:hover::before {
+  opacity: 1;
+}
+
+/* ── Chat bubbles ── */
+.chat-user {
+  @apply bg-nexus-accent text-white p-3 rounded-2xl rounded-br-md text-sm;
+  max-width: 80%;
+}
+.chat-agent {
+  @apply bg-nexus-card text-gray-200 p-3 rounded-2xl rounded-bl-md text-sm border border-nexus-border;
+  max-width: 80%;
+}
+
+/* ── Divider ── */
+.divider {
+  @apply border-t border-nexus-border my-4;
+}
+
+/* ── Stat ── */
+.stat-value {
+  @apply text-2xl font-bold text-white;
+}
+.stat-label {
+  @apply text-xs text-nexus-muted mt-0.5 uppercase tracking-wider;
 }
