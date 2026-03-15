@@ -7,6 +7,10 @@ import {
   unlockLocalWallet, signTransaction, hasLocalWallet, importWallet,
   syncToServer, syncFromServer,
 } from "./wallet";
+import {
+  connectOKXWallet, disconnectOKXWallet, isOKXConnected,
+  getOKXAddress, sendOKXTransaction,
+} from "./okx-wallet";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
@@ -68,6 +72,7 @@ export default function Dashboard() {
   const twitterUsername = (session as any)?.twitterUsername;
 
   const [wallet, setWallet] = useState<string | null>(null);
+  const [walletMode, setWalletMode] = useState<"local" | "okx" | null>(null);
   const [unlocked, setUnlocked] = useState(false);
   const [password, setPassword] = useState("");
   const [passwordMode, setPasswordMode] = useState<"set" | "unlock" | "import" | null>(null);
@@ -121,6 +126,7 @@ export default function Dashboard() {
   const handleCreateWallet = () => {
     const { address, privateKey } = createLocalWallet();
     setWallet(address);
+    setWalletMode("local");
     setBackupKey(privateKey);
     privateKeyRef.current = privateKey;
     setPasswordMode("set");
@@ -175,6 +181,23 @@ export default function Dashboard() {
     }
   };
 
+  // ── OKX Wallet ──
+  const handleConnectOKX = async () => {
+    const result = await connectOKXWallet();
+    if (result) {
+      setWallet(result.address);
+      setWalletMode("okx");
+      setUnlocked(true); // OKX Wallet is always "unlocked" — signs via wallet app
+    }
+  };
+
+  const handleDisconnectOKX = () => {
+    disconnectOKXWallet();
+    setWallet(null);
+    setWalletMode(null);
+    setUnlocked(false);
+  };
+
   const handleBindTelegram = async () => {
     const resp = await fetch(`${GATEWAY}/bind/generate`, {
       method: "POST",
@@ -186,8 +209,12 @@ export default function Dashboard() {
   };
 
   const executeTradeLocally = async (tradeParams: any) => {
-    if (!privateKeyRef.current || !wallet) {
+    if (walletMode !== "okx" && !privateKeyRef.current) {
       setChatHistory(h => [...h, { role: "agent", text: "Wallet locked. Please unlock first." }]);
+      return;
+    }
+    if (!wallet) {
+      setChatHistory(h => [...h, { role: "agent", text: "No wallet connected." }]);
       return;
     }
     setChatLoading(true);
@@ -202,7 +229,10 @@ export default function Dashboard() {
         setChatHistory(h => [...h, { role: "agent", text: `Trade failed: ${buildResult.error}` }]);
         return;
       }
-      const txHash = await signTransaction(privateKeyRef.current, buildResult.tx);
+      // Sign via OKX Wallet or local key
+      const txHash = walletMode === "okx"
+        ? await sendOKXTransaction(buildResult.tx)
+        : await signTransaction(privateKeyRef.current!, buildResult.tx);
       setChatHistory(h => [...h, {
         role: "agent",
         text: `Trade executed!\n\nTX: ${txHash}\nWallet: ${wallet}\n\nhttps://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
@@ -392,7 +422,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {[
               { step: "01", title: "Login", desc: "Sign in with your X account. One click, no signup forms." },
-              { step: "02", title: "Create Wallet", desc: "Generate an X Layer wallet in your browser. Set a trading password to encrypt it." },
+              { step: "02", title: "Connect Wallet", desc: "Connect OKX Wallet (0 Gas, x402) or create a local wallet in your browser." },
               { step: "03", title: "Chat & Trade", desc: "Tell the AI what you want. It analyzes, routes, and executes — you just confirm." },
             ].map((s, i) => (
               <div key={i} className="flex gap-4 items-start">
@@ -519,8 +549,14 @@ export default function Dashboard() {
 
             {!wallet ? (
               <div className="space-y-2.5">
-                <button onClick={handleCreateWallet} className="btn-primary w-full text-sm py-2.5">
-                  Create Wallet
+                <button onClick={handleConnectOKX} className="btn-primary w-full text-sm py-2.5 flex items-center justify-center gap-2">
+                  <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
+                  Connect OKX Wallet
+                </button>
+                <div className="text-[10px] text-nexus-muted text-center">0 Gas USDC · x402 Payments</div>
+                <div className="divider !my-2" />
+                <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">
+                  Create Local Wallet
                 </button>
                 <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">
                   Import Private Key
@@ -570,11 +606,13 @@ export default function Dashboard() {
                       <>
                         <span className="flex items-center gap-1.5 text-xs text-nexus-green">
                           <IconUnlock />
-                          Unlocked (local)
+                          {walletMode === "okx" ? "OKX Wallet" : "Unlocked (local)"}
                         </span>
-                        <button onClick={handleLock} className="btn-ghost text-xs flex items-center gap-1">
-                          <IconLock /> Lock
-                        </button>
+                        {walletMode !== "okx" && (
+                          <button onClick={handleLock} className="btn-ghost text-xs flex items-center gap-1">
+                            <IconLock /> Lock
+                          </button>
+                        )}
                       </>
                     ) : (
                       <button onClick={() => setPasswordMode("unlock")} className="btn-secondary w-full text-sm py-2.5 flex items-center justify-center gap-2">
@@ -586,8 +624,11 @@ export default function Dashboard() {
                 )}
 
                 <div className="text-[10px] text-nexus-muted flex items-center gap-1">
-                  <IconShield /> Key encrypted in browser · server never sees it
+                  <IconShield /> {walletMode === "okx" ? "Connected via OKX Wallet · 0 Gas x402" : "Key encrypted in browser · server never sees it"}
                 </div>
+                {walletMode === "okx" && (
+                  <button onClick={handleDisconnectOKX} className="btn-ghost text-xs text-nexus-red mt-1">Disconnect OKX Wallet</button>
+                )}
               </div>
             )}
           </div>
