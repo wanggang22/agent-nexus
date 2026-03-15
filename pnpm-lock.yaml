@@ -289,6 +289,12 @@ importers:
 
   packages/twitter-bot:
     dependencies:
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      express:
+        specifier: ^4.21.0
+        version: 4.22.1
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -296,6 +302,12 @@ importers:
         specifier: ^1.18.0
         version: 1.29.0
     devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.6
       tsx:
         specifier: ^4.19.0
         version: 4.21.0

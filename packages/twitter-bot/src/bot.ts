@@ -170,18 +170,85 @@ async function pollMentions() {
   }
 }
 
+// ── Manual trigger HTTP server ──
+import express from "express";
+import cors from "cors";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// POST /reply — manually trigger reply to a tweet
+// Body: { tweet_id: "123", message?: "custom question" }
+app.post("/reply", async (req, res) => {
+  const { tweet_id, message } = req.body;
+  if (!tweet_id) return res.status(400).json({ error: "tweet_id required" });
+  try {
+    // If no message provided, fetch the tweet text
+    let question = message;
+    if (!question) {
+      try {
+        const tweet = await client.v2.singleTweet(tweet_id, { "tweet.fields": ["text", "author_id"] });
+        question = tweet.data.text.replace(/@\w+/g, "").trim();
+      } catch {
+        question = "分析当前市场趋势";
+      }
+    }
+    const response = await askAgentNexus(question);
+    await replyToTweet(tweet_id, response);
+    res.json({ success: true, reply: response.slice(0, 200) });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// POST /tweet — post a standalone tweet
+app.post("/tweet", async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: "text required" });
+  try {
+    const posted = await client.v2.tweet(text);
+    res.json({ success: true, tweet_id: posted.data.id });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// POST /analyze-and-tweet — ask AI a question and post the answer as a tweet
+app.post("/analyze-and-tweet", async (req, res) => {
+  const { question } = req.body;
+  if (!question) return res.status(400).json({ error: "question required" });
+  try {
+    const response = await askAgentNexus(question);
+    const tweetText = response.length > 270 ? response.slice(0, 267) + "..." : response;
+    const posted = await client.v2.tweet(tweetText);
+    res.json({ success: true, tweet_id: posted.data.id, reply: response.slice(0, 200) });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+app.get("/health", (_req, res) => {
+  res.json({ bot: "twitter", status: "online" });
+});
+
 async function main() {
   try {
     const me = await client.v2.me();
     console.log(`\n🐦 AgentNexus Twitter Bot running`);
     console.log(`   Account: @${me.data.username}`);
     console.log(`   Gateway: ${GATEWAY_URL}`);
-    console.log(`   Register: ${SITE_URL}\n`);
+    console.log(`   Register: ${SITE_URL}`);
+    console.log(`   Manual: POST /reply, /tweet, /analyze-and-tweet\n`);
   } catch (e: any) {
     console.error(`[TwitterBot] Auth failed: ${e.message}`);
     process.exit(1);
   }
 
+  const PORT = parseInt(process.env.PORT || "8080");
+  app.listen(PORT, () => console.log(`   HTTP server on :${PORT}\n`));
+
+  // Still try polling (will fail on free tier but won't crash)
   await pollMentions();
   setInterval(pollMentions, POLL_INTERVAL);
 }
