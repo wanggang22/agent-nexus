@@ -69,11 +69,18 @@ export default function Dashboard() {
   const [approving, setApproving] = useState(false);
 
   // ── Navigation State ──
-  const [activeView, setActiveView] = useState<"hot" | "wallet" | "overview" | string>("hot"); // "hot", "wallet", "overview", or "token:SYMBOL"
+  const [activeView, setActiveView] = useState<string>("hot"); // "hot", "smart", "whale", "meme", "wallet", "overview", "search", or "token:SYMBOL"
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedChain, setSelectedChain] = useState("base"); // multi-chain: base has most meme activity
 
-  // ── Hot Tokens ──
+  // ── Market Data ──
   const [hotTokens, setHotTokens] = useState<any[]>([]);
+  const [smartMoneyData, setSmartMoneyData] = useState<any[]>([]);
+  const [whaleData, setWhaleData] = useState<any[]>([]);
+  const [memeData, setMemeData] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
   // ── Token Chats (per-token conversation context) ──
   const [tokenChats, setTokenChats] = useState<Map<string, TokenChat>>(new Map());
@@ -149,26 +156,79 @@ export default function Dashboard() {
     });
   }, [wallet]);
 
-  // ── Fetch hot tokens ──
-  const fetchHotTokens = async () => {
+  // ── Data fetching (multi-chain) ──
+  const fetchHotTokens = async (chain = selectedChain) => {
+    setDataLoading(true);
     try {
-      const [hotResp, trendResp, smartResp] = await Promise.all([
-        fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).catch(() => ({ signals: [] })),
-        fetch(`${GATEWAY}/signals/trending`).then(r => r.json()).catch(() => ({ signals: [] })),
-        fetch(`${GATEWAY}/signals/smart-money`).then(r => r.json()).catch(() => ({ signals: [] })),
+      const [hotResp, trendResp] = await Promise.all([
+        fetch(`${GATEWAY}/signals/hot-tokens?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] })),
+        fetch(`${GATEWAY}/signals/trending?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] })),
       ]);
-      // Merge and deduplicate
-      const all = [...(hotResp.signals || []), ...(trendResp.signals || []), ...(smartResp.signals || [])];
-      const seen = new Set<string>();
-      const unique = all.filter(t => {
-        const key = t.token?.symbol || t.token?.address;
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      setHotTokens(unique.slice(0, 30));
-    } catch {}
+      const all = [...(hotResp.signals || []), ...(trendResp.signals || [])];
+      const filtered = dedup(all).filter(t => t.token?.symbol && t.token.symbol !== "N/A");
+      setHotTokens(filtered.slice(0, 30));
+    } catch {} finally { setDataLoading(false); }
   };
+
+  const fetchSmartMoney = async (chain = selectedChain) => {
+    setDataLoading(true);
+    try {
+      const resp = await fetch(`${GATEWAY}/signals/smart-money?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
+      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "UNKNOWN" && s.token.symbol !== "N/A");
+      setSmartMoneyData(filtered.slice(0, 30));
+    } catch {} finally { setDataLoading(false); }
+  };
+
+  const fetchWhaleAlerts = async (chain = selectedChain) => {
+    setDataLoading(true);
+    try {
+      const resp = await fetch(`${GATEWAY}/signals/whale-alert?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
+      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "N/A");
+      setWhaleData(filtered.slice(0, 30));
+    } catch {} finally { setDataLoading(false); }
+  };
+
+  const fetchMemeScanner = async (chain = selectedChain) => {
+    setDataLoading(true);
+    try {
+      const resp = await fetch(`${GATEWAY}/signals/meme-scan?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
+      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "N/A");
+      setMemeData(filtered.slice(0, 30));
+    } catch {} finally { setDataLoading(false); }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setDataLoading(true);
+    try {
+      // Use chat endpoint to search for token
+      const resp = await fetch(`${GATEWAY}/signals/trending?chain=${selectedChain}`).then(r => r.json()).catch(() => ({ signals: [] }));
+      const all = (resp.signals || []).filter((s: any) =>
+        (s.token?.symbol || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.details?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setSearchResults(all);
+    } catch {} finally { setDataLoading(false); }
+  };
+
+  function dedup(tokens: any[]): any[] {
+    const seen = new Set<string>();
+    return tokens.filter(t => {
+      const key = t.token?.symbol || t.token?.address;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  // Refetch when chain changes
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (activeView === "hot") fetchHotTokens(selectedChain);
+    else if (activeView === "smart") fetchSmartMoney(selectedChain);
+    else if (activeView === "whale") fetchWhaleAlerts(selectedChain);
+    else if (activeView === "meme") fetchMemeScanner(selectedChain);
+  }, [selectedChain]);
 
   // ── Fetch token on-chain data ──
   const fetchTokenData = useCallback(async (symbol: string, address?: string) => {
@@ -468,21 +528,33 @@ export default function Dashboard() {
 
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-2">
-          {/* Hot Meme */}
-          <button
-            onClick={() => { setActiveView("hot"); fetchHotTokens(); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
-              activeView === "hot" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <IconFire />
-            {sidebarOpen && <span>Hot Meme</span>}
-          </button>
+          {/* MARKET section */}
+          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-1">Market</div>}
 
-          {/* Overview */}
+          {[
+            { id: "hot", icon: <IconFire />, label: "Hot Tokens", action: () => fetchHotTokens() },
+            { id: "smart", icon: <Icon d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: "Smart Money", action: () => fetchSmartMoney() },
+            { id: "whale", icon: <Icon d="M20.893 13.393l-1.135-1.135a2.252 2.252 0 0 1-.421-.585l-1.08-2.16a.414.414 0 0 0-.663-.107.827.827 0 0 1-.812.21l-1.273-.363a.89.89 0 0 0-.738 1.595l.587.39c.59.395.674 1.23.172 1.732l-.2.2c-.212.212-.33.498-.33.796v.41c0 .409-.11.809-.32 1.158l-1.315 2.191a2.11 2.11 0 0 1-1.81 1.025 1.055 1.055 0 0 1-1.055-1.055v-1.172c0-.92-.56-1.747-1.414-2.089l-.655-.261a2.25 2.25 0 0 1-1.383-2.46l.007-.042a2.25 2.25 0 0 1 .29-.787l.082-.147a2.25 2.25 0 0 1 3.577-.459M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: "Whale Alerts", action: () => fetchWhaleAlerts() },
+            { id: "meme", icon: <Icon d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />, label: "Meme Scanner", action: () => fetchMemeScanner() },
+            { id: "search", icon: <Icon d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />, label: "Search", action: () => {} },
+          ].map(nav => (
+            <button key={nav.id}
+              onClick={() => { setActiveView(nav.id); nav.action(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
+                activeView === nav.id ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+              }`}
+            >
+              {nav.icon}
+              {sidebarOpen && <span>{nav.label}</span>}
+            </button>
+          ))}
+
+          {/* TOOLS section */}
+          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-4">Tools</div>}
+
           <button
             onClick={() => setActiveView("overview")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
               activeView === "overview" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
             }`}
           >
@@ -490,10 +562,9 @@ export default function Dashboard() {
             {sidebarOpen && <span>Overview</span>}
           </button>
 
-          {/* Wallet */}
           <button
             onClick={() => setActiveView("wallet")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
               activeView === "wallet" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
             }`}
           >
@@ -559,57 +630,121 @@ export default function Dashboard() {
       {/* ══════════ MAIN CONTENT ══════════ */}
       <main className="flex-1 overflow-hidden flex flex-col">
 
-        {/* ── HOT MEME VIEW ── */}
-        {activeView === "hot" && (
+        {/* ── Chain Selector + Token List (shared by hot/smart/whale/meme) ── */}
+        {["hot", "smart", "whale", "meme", "search"].includes(activeView) && (
           <div className="flex-1 overflow-y-auto">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
+              {/* Header with chain selector */}
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h1 className="text-xl font-bold text-white">Hot Tokens</h1>
-                  <p className="text-xs text-nexus-muted mt-0.5">Trending · Smart Money · Meme Scanner</p>
+                  <h1 className="text-xl font-bold text-white">
+                    {activeView === "hot" ? "Hot Tokens" : activeView === "smart" ? "Smart Money" : activeView === "whale" ? "Whale Alerts" : activeView === "meme" ? "Meme Scanner" : "Search"}
+                  </h1>
+                  <p className="text-xs text-nexus-muted mt-0.5">
+                    {activeView === "hot" ? "Trending tokens by volume & mentions" : activeView === "smart" ? "What smart money wallets are buying" : activeView === "whale" ? "Large transactions (>$10k)" : activeView === "meme" ? "New meme tokens launching" : "Find any token"}
+                  </p>
                 </div>
-                <button onClick={fetchHotTokens} className="btn-secondary text-xs py-2 px-4">Refresh</button>
+                <button onClick={() => {
+                  if (activeView === "hot") fetchHotTokens();
+                  else if (activeView === "smart") fetchSmartMoney();
+                  else if (activeView === "whale") fetchWhaleAlerts();
+                  else if (activeView === "meme") fetchMemeScanner();
+                }} className="btn-secondary text-xs py-2 px-4">Refresh</button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {hotTokens.map((t, i) => (
-                  <div
-                    key={i}
-                    onClick={() => openTokenChat(t.token?.symbol || "UNKNOWN", t.token?.address || "")}
-                    className="card cursor-pointer hover:border-nexus-accent/40 group"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-nexus-muted w-5">#{i + 1}</span>
-                        <span className="text-white font-semibold">{t.token?.symbol || "?"}</span>
-                      </div>
-                      {t.details?.change_24h && (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-lg ${
-                          parseFloat(t.details.change_24h) >= 0
-                            ? "text-nexus-green bg-nexus-green/10"
-                            : "text-nexus-red bg-nexus-red/10"
-                        }`}>
-                          {parseFloat(t.details.change_24h) >= 0 ? "+" : ""}{parseFloat(t.details.change_24h).toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
-                    {t.details?.name && <div className="text-xs text-nexus-muted mb-2 truncate">{t.details.name}</div>}
-                    <div className="flex gap-4 text-[10px] text-nexus-muted">
-                      {t.details?.market_cap && <span>MCap ${Number(t.details.market_cap).toLocaleString()}</span>}
-                      {t.details?.volume_24h && <span>Vol ${Number(t.details.volume_24h).toLocaleString()}</span>}
-                    </div>
-                    <div className="mt-3 flex items-center gap-1 text-[10px] text-nexus-accent-light opacity-0 group-hover:opacity-100 transition-opacity">
-                      <IconChat /> Open analysis chat
-                    </div>
-                  </div>
+              {/* Chain Tabs */}
+              <div className="flex gap-1 mb-4 bg-nexus-card rounded-xl p-1 border border-nexus-border w-fit">
+                {[
+                  { id: "base", label: "Base" },
+                  { id: "ethereum", label: "ETH" },
+                  { id: "solana", label: "SOL" },
+                  { id: "bsc", label: "BSC" },
+                  { id: "xlayer", label: "X Layer" },
+                ].map(chain => (
+                  <button key={chain.id}
+                    onClick={() => setSelectedChain(chain.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      selectedChain === chain.id ? "bg-nexus-accent text-white" : "text-nexus-muted hover:text-white"
+                    }`}
+                  >{chain.label}</button>
                 ))}
-                {hotTokens.length === 0 && (
-                  <div className="col-span-full text-center py-20 text-nexus-muted">
-                    <IconFire />
-                    <p className="mt-2">Loading hot tokens...</p>
-                  </div>
-                )}
               </div>
+
+              {/* Search Bar (for search view) */}
+              {activeView === "search" && (
+                <div className="flex gap-2 mb-4">
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
+                    className="input flex-1" placeholder="Token name, symbol, or address..." />
+                  <button onClick={handleSearch} className="btn-primary text-sm px-5">Search</button>
+                </div>
+              )}
+
+              {/* Loading */}
+              {dataLoading && (
+                <div className="text-center py-12">
+                  <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <p className="text-nexus-muted text-sm">Loading {selectedChain} data...</p>
+                </div>
+              )}
+
+              {/* Token Grid */}
+              {!dataLoading && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(activeView === "hot" ? hotTokens : activeView === "smart" ? smartMoneyData : activeView === "whale" ? whaleData : activeView === "meme" ? memeData : searchResults).map((t, i) => (
+                    <div key={i}
+                      onClick={() => openTokenChat(t.token?.symbol || "UNKNOWN", t.token?.address || "")}
+                      className="card cursor-pointer hover:border-nexus-accent/40 group"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] text-nexus-muted w-5 shrink-0">#{i + 1}</span>
+                          <span className="text-white font-semibold truncate">{t.token?.symbol || "?"}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-border text-nexus-muted shrink-0">{t.token?.chain || selectedChain}</span>
+                        </div>
+                        {t.details?.change_24h && (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-lg shrink-0 ${
+                            parseFloat(t.details.change_24h) >= 0 ? "text-nexus-green bg-nexus-green/10" : "text-nexus-red bg-nexus-red/10"
+                          }`}>
+                            {parseFloat(t.details.change_24h) >= 0 ? "+" : ""}{parseFloat(t.details.change_24h).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {t.details?.name && <div className="text-xs text-nexus-muted mb-2 truncate">{t.details.name}</div>}
+
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                        {t.details?.price && <div><span className="text-nexus-muted">Price </span><span className="text-white">${t.details.price}</span></div>}
+                        {t.details?.market_cap && <div><span className="text-nexus-muted">MCap </span><span className="text-white">${Number(t.details.market_cap).toLocaleString()}</span></div>}
+                        {t.details?.volume_24h && <div><span className="text-nexus-muted">Vol </span><span className="text-white">${Number(t.details.volume_24h).toLocaleString()}</span></div>}
+                        {t.details?.wallet_count && <div><span className="text-nexus-muted">Wallets </span><span className="text-white">{t.details.wallet_count}</span></div>}
+                        {t.details?.amount_usd && <div><span className="text-nexus-muted">Amount </span><span className="text-white">${Number(t.details.amount_usd).toLocaleString()}</span></div>}
+                        {t.details?.holders && <div><span className="text-nexus-muted">Holders </span><span className="text-white">{t.details.holders}</span></div>}
+                        {t.details?.hot_score && <div><span className="text-nexus-muted">Score </span><span className="text-nexus-accent-light">{t.details.hot_score}</span></div>}
+                        {t.details?.sold_ratio_pct && <div><span className="text-nexus-muted">Sold </span><span className="text-white">{t.details.sold_ratio_pct}%</span></div>}
+                      </div>
+
+                      {/* Smart money specific */}
+                      {t.type === "smart_money_buy" && t.details?.wallets && (
+                        <div className="mt-2 text-[9px] text-nexus-muted truncate">
+                          Wallets: {(t.details.wallets as string[]).join(", ")}
+                        </div>
+                      )}
+
+                      <div className="mt-3 flex items-center gap-1 text-[10px] text-nexus-accent-light opacity-0 group-hover:opacity-100 transition-opacity">
+                        <IconChat /> Analyze with AI
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Empty state */}
+                  {(activeView === "hot" ? hotTokens : activeView === "smart" ? smartMoneyData : activeView === "whale" ? whaleData : activeView === "meme" ? memeData : searchResults).length === 0 && !dataLoading && (
+                    <div className="col-span-full text-center py-16 text-nexus-muted">
+                      <p className="text-sm">No data for <span className="text-white font-medium">{selectedChain}</span>. Try another chain.</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
