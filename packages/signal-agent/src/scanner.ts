@@ -1,4 +1,4 @@
-import { runOnchainos, safeJsonParse } from "shared";
+import { runOnchainos, runOnchainosAsync, safeJsonParse } from "shared";
 import type { Signal } from "shared";
 
 function generateSignalId(): string {
@@ -8,7 +8,7 @@ function generateSignalId(): string {
 }
 
 export async function getSmartMoneySignals(chain = "xlayer"): Promise<Signal[]> {
-  const raw = runOnchainos(`signal list --chain ${chain} --wallet-type 1`);
+  const raw = await runOnchainosAsync(`signal list --chain ${chain} --wallet-type 1`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data;
 
@@ -47,13 +47,13 @@ export async function getSmartMoneySignals(chain = "xlayer"): Promise<Signal[]> 
 }
 
 export async function getWhaleAlerts(chain = "xlayer"): Promise<Signal[]> {
-  const raw = runOnchainos(`signal list --chain ${chain} --wallet-type 3 --min-amount-usd 10000`);
+  const raw = await runOnchainosAsync(`signal list --chain ${chain} --wallet-type 3 --min-amount-usd 10000`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data;
 
   if (!Array.isArray(items) || items.length === 0) {
     // Try without min amount filter
-    const raw2 = runOnchainos(`signal list --chain ${chain} --wallet-type 3`);
+    const raw2 = await runOnchainosAsync(`signal list --chain ${chain} --wallet-type 3`);
     const parsed2 = safeJsonParse(raw2);
     const items2 = parsed2?.data;
 
@@ -74,7 +74,7 @@ export async function getWhaleAlerts(chain = "xlayer"): Promise<Signal[]> {
 }
 
 export async function getMemeScan(chain = "xlayer", stage = "NEW"): Promise<Signal[]> {
-  const raw = runOnchainos(`memepump tokens --chain ${chain} --stage ${stage}`);
+  const raw = await runOnchainosAsync(`memepump tokens --chain ${chain} --stage ${stage}`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data;
 
@@ -109,7 +109,7 @@ export async function getMemeScan(chain = "xlayer", stage = "NEW"): Promise<Sign
 }
 
 export async function getTrendingTokens(chain = "xlayer"): Promise<Signal[]> {
-  const raw = runOnchainos(`token trending --chain ${chain}`);
+  const raw = await runOnchainosAsync(`token trending --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data;
 
@@ -167,7 +167,7 @@ function mapSignals(items: any[], type: Signal["type"], chain: string): Signal[]
 }
 
 export async function getHotTokens(chain = "xlayer"): Promise<Signal[]> {
-  const raw = runOnchainos(`token hot-tokens --chain ${chain}`);
+  const raw = await runOnchainosAsync(`token hot-tokens --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data;
 
@@ -205,9 +205,9 @@ export async function getHotTokens(chain = "xlayer"): Promise<Signal[]> {
 }
 
 export async function getWalletPnL(walletAddress: string, chain = "xlayer") {
-  const overviewRaw = runOnchainos(`market portfolio-overview --address ${walletAddress} --chain ${chain}`);
-  const historyRaw = runOnchainos(`market portfolio-dex-history --address ${walletAddress} --chain ${chain}`);
-  const recentPnlRaw = runOnchainos(`market portfolio-recent-pnl --address ${walletAddress} --chain ${chain}`);
+  const overviewRaw = await runOnchainosAsync(`market portfolio-overview --address ${walletAddress} --chain ${chain}`);
+  const historyRaw = await runOnchainosAsync(`market portfolio-dex-history --address ${walletAddress} --chain ${chain}`);
+  const recentPnlRaw = await runOnchainosAsync(`market portfolio-recent-pnl --address ${walletAddress} --chain ${chain}`);
 
   const overview = safeJsonParse(overviewRaw)?.data || safeJsonParse(overviewRaw) || {};
   const history = safeJsonParse(historyRaw)?.data || [];
@@ -241,7 +241,7 @@ export async function getWalletPnL(walletAddress: string, chain = "xlayer") {
 }
 
 export async function getApedWallets(tokenAddress: string, chain = "xlayer") {
-  const raw = runOnchainos(`memepump aped-wallet --address ${tokenAddress} --chain ${chain}`);
+  const raw = await runOnchainosAsync(`memepump aped-wallet --address ${tokenAddress} --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data || parsed || [];
 
@@ -262,7 +262,7 @@ export async function getApedWallets(tokenAddress: string, chain = "xlayer") {
 }
 
 export async function getTokenPnL(walletAddress: string, tokenAddress: string, chain = "xlayer") {
-  const raw = runOnchainos(`market portfolio-token-pnl --address ${walletAddress} --token ${tokenAddress} --chain ${chain}`);
+  const raw = await runOnchainosAsync(`market portfolio-token-pnl --address ${walletAddress} --token ${tokenAddress} --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const data = parsed?.data || parsed || {};
 
@@ -283,7 +283,7 @@ export async function getTokenPnL(walletAddress: string, tokenAddress: string, c
 
 export async function getBatchPrices(tokenAddresses: string[], chain = "xlayer") {
   const addressList = tokenAddresses.join(",");
-  const raw = runOnchainos(`market prices --addresses ${addressList} --chain ${chain}`);
+  const raw = await runOnchainosAsync(`market prices --addresses ${addressList} --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const items = parsed?.data || parsed || [];
 

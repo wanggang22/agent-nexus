@@ -40,10 +40,10 @@ app.get("/ai-stats", (_req, res) => {
 });
 
 // ── Basic mode (FREE): rule-based analysis from OnchainOS data ──
-app.get("/basic/technical/:token", (req, res) => {
+app.get("/basic/technical/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicTechnical(req.params.token, chain);
+    const result = await basicTechnical(req.params.token, chain);
     recordCall(AGENT, "basic-technical", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -51,10 +51,10 @@ app.get("/basic/technical/:token", (req, res) => {
   }
 });
 
-app.get("/basic/fundamental/:token", (req, res) => {
+app.get("/basic/fundamental/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicFundamental(req.params.token, chain);
+    const result = await basicFundamental(req.params.token, chain);
     recordCall(AGENT, "basic-fundamental", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -62,10 +62,10 @@ app.get("/basic/fundamental/:token", (req, res) => {
   }
 });
 
-app.get("/basic/spread/:token", (req, res) => {
+app.get("/basic/spread/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicSpread(req.params.token, chain);
+    const result = await basicSpread(req.params.token, chain);
     recordCall(AGENT, "basic-spread", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -73,10 +73,10 @@ app.get("/basic/spread/:token", (req, res) => {
   }
 });
 
-app.get("/basic/meme/:token", (req, res) => {
+app.get("/basic/meme/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicMeme(req.params.token, chain);
+    const result = await basicMeme(req.params.token, chain);
     recordCall(AGENT, "basic-meme", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -84,10 +84,10 @@ app.get("/basic/meme/:token", (req, res) => {
   }
 });
 
-app.get("/basic/full/:token", (req, res) => {
+app.get("/basic/full/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicFullAnalysis(req.params.token, chain);
+    const result = await basicFullAnalysis(req.params.token, chain);
     recordCall(AGENT, "basic-full", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -96,10 +96,10 @@ app.get("/basic/full/:token", (req, res) => {
 });
 
 // Basic meme with bundle/sniper detection (FREE, more OnchainOS commands)
-app.get("/basic/meme-deep/:token", (req, res) => {
+app.get("/basic/meme-deep/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = basicMeme(req.params.token, chain);
+    const result = await basicMeme(req.params.token, chain);
     recordCall(AGENT, "basic-meme-deep", 0);
     res.json({ mode: "basic-deep", ...result });
   } catch (e: any) {

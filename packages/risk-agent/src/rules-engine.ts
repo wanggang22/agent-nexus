@@ -1,4 +1,4 @@
-import { runOnchainos, safeJsonParse } from "shared";
+import { runOnchainos, runOnchainosAsync, safeJsonParse } from "shared";
 import type { RiskAssessment } from "shared";
 
 const RISK_RULES = {
@@ -22,9 +22,9 @@ export async function assessRisk(
   portfolioValue = 10000
 ): Promise<RiskAssessment> {
   // Gather data from Onchain OS
-  const advancedRaw = runOnchainos(`token advanced-info --address ${tokenAddress} --chain ${chain}`);
-  const holdersRaw = runOnchainos(`token holders --address ${tokenAddress} --chain ${chain}`);
-  const priceRaw = runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`);
+  const advancedRaw = await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`);
+  const holdersRaw = await runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`);
+  const priceRaw = await runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`);
 
   const advanced = safeJsonParse(advancedRaw)?.data || {};
   const holdersData = safeJsonParse(holdersRaw)?.data;
@@ -122,8 +122,8 @@ export async function tokenSafety(tokenAddress: string, chain = "xlayer"): Promi
 }
 
 export async function portfolioRisk(walletAddress: string, chain = "xlayer") {
-  const totalValueRaw = runOnchainos(`portfolio total-value --address ${walletAddress} --chains ${chain}`);
-  const balancesRaw = runOnchainos(`portfolio all-balances --address ${walletAddress} --chains ${chain}`);
+  const totalValueRaw = await runOnchainosAsync(`portfolio total-value --address ${walletAddress} --chains ${chain}`);
+  const balancesRaw = await runOnchainosAsync(`portfolio all-balances --address ${walletAddress} --chains ${chain}`);
 
   const totalValue = safeJsonParse(totalValueRaw)?.data?.[0]?.totalValue || "0";
   const balances = safeJsonParse(balancesRaw)?.data || [];
@@ -142,7 +142,7 @@ export async function portfolioRisk(walletAddress: string, chain = "xlayer") {
  */
 export async function tokenBalances(walletAddress: string, tokenAddresses: string[], chain = "xlayer") {
   const tokens = tokenAddresses.join(",");
-  const raw = runOnchainos(`portfolio token-balances --address ${walletAddress} --tokens ${tokens} --chains ${chain}`);
+  const raw = await runOnchainosAsync(`portfolio token-balances --address ${walletAddress} --tokens ${tokens} --chains ${chain}`);
   const parsed = safeJsonParse(raw);
   const data = parsed?.data || parsed || [];
 

@@ -1,6 +1,6 @@
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { env, xlayer, runOnchainos, safeJsonParse } from "shared";
+import { env, xlayer, runOnchainos, runOnchainosAsync, safeJsonParse } from "shared";
 import type { TradeQuote } from "shared";
 
 function generateId(): string {
@@ -59,7 +59,7 @@ export async function getQuote(
   chain = "xlayer",
   maxSlippage = "auto"
 ): Promise<TradeQuote> {
-  const raw = runOnchainos(
+  const raw = await runOnchainosAsync(
     `swap quote --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain}`
   );
 
@@ -133,7 +133,7 @@ export async function buildTrade(
   const slippageNum = parseFloat(quote.slippage) || 1;
 
   // OKX DEX aggregator builds the swap tx
-  const swapRaw = runOnchainos(
+  const swapRaw = await runOnchainosAsync(
     `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain} --wallet ${walletAddress} --slippage ${slippageNum}`
   );
 
@@ -156,7 +156,7 @@ export async function buildTrade(
   }
 
   // Simulate
-  const simRaw = runOnchainos(
+  const simRaw = await runOnchainosAsync(
     `gateway simulate --from ${walletAddress} --to ${to} --data ${data} --chain ${chain}`
   );
   if (simRaw && simRaw.includes("fail")) {
@@ -274,7 +274,7 @@ export async function getApproval(
   amount: string,
   chain = "xlayer"
 ) {
-  const raw = runOnchainos(
+  const raw = await runOnchainosAsync(
     `swap approve --token ${tokenAddress} --wallet ${walletAddress} --amount ${amount} --chain ${chain}`
   );
 
@@ -299,7 +299,7 @@ export async function getApproval(
  * Get current gas prices for a chain.
  */
 export async function getGasPrice(chain = "xlayer") {
-  const raw = runOnchainos(`gateway gas --chain ${chain}`);
+  const raw = await runOnchainosAsync(`gateway gas --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const data = parsed?.data || parsed || {};
 
@@ -321,7 +321,7 @@ export async function getGasPrice(chain = "xlayer") {
  * Get available DEX liquidity sources on a chain.
  */
 export async function getLiquiditySources(chain = "xlayer") {
-  const raw = runOnchainos(`swap liquidity --chain ${chain}`);
+  const raw = await runOnchainosAsync(`swap liquidity --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const sources = parsed?.data || parsed || [];
 
@@ -347,7 +347,7 @@ export async function estimateGasLimit(
   value = "0",
   chain = "xlayer"
 ) {
-  const raw = runOnchainos(
+  const raw = await runOnchainosAsync(
     `gateway gas-limit --from ${from} --to ${to} --data ${data} --value ${value} --chain ${chain}`
   );
   const parsed = safeJsonParse(raw);
@@ -364,7 +364,7 @@ export async function estimateGasLimit(
  * Broadcast a signed transaction.
  */
 export async function broadcastTx(signedTx: string, chain = "xlayer") {
-  const raw = runOnchainos(`gateway broadcast --signed-tx ${signedTx} --chain ${chain}`);
+  const raw = await runOnchainosAsync(`gateway broadcast --signed-tx ${signedTx} --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const data = parsed?.data || parsed || {};
 
@@ -381,7 +381,7 @@ export async function broadcastTx(signedTx: string, chain = "xlayer") {
  * Track broadcast order status.
  */
 export async function trackBroadcastOrder(orderId: string, chain = "xlayer") {
-  const raw = runOnchainos(`gateway orders --order-id ${orderId} --chain ${chain}`);
+  const raw = await runOnchainosAsync(`gateway orders --order-id ${orderId} --chain ${chain}`);
   const parsed = safeJsonParse(raw);
   const data = parsed?.data || parsed || {};
 

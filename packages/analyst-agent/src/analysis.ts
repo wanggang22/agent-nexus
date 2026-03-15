@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { env, runOnchainos, safeJsonParse } from "shared";
+import { env, runOnchainos, runOnchainosAsync, safeJsonParse } from "shared";
 import type { TechnicalAnalysis, FundamentalAnalysis, SpreadAnalysis, MemeAnalysis, AnalysisReport } from "shared";
 
 function generateId(): string {
@@ -49,54 +49,54 @@ export function getAiCostStats() {
   };
 }
 
-function gatherMarketData(tokenAddress: string, chain: string): Record<string, string> {
+async function gatherMarketData(tokenAddress: string, chain: string): Promise<Record<string, string>> {
   return {
-    price: runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`),
-    kline: runOnchainos(`market kline --address ${tokenAddress} --chain ${chain} --bar 1H --limit 24`),
-    tokenInfo: runOnchainos(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
-    holders: runOnchainos(`token holders --address ${tokenAddress} --chain ${chain}`),
-    liquidity: runOnchainos(`token liquidity --address ${tokenAddress} --chain ${chain}`),
+    price: await runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`),
+    kline: await runOnchainosAsync(`market kline --address ${tokenAddress} --chain ${chain} --bar 1H --limit 24`),
+    tokenInfo: await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
+    holders: await runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`),
+    liquidity: await runOnchainosAsync(`token liquidity --address ${tokenAddress} --chain ${chain}`),
   };
 }
 
 /**
  * Gather social, community, and smart money data for meme analysis.
  */
-function gatherMemeData(tokenAddress: string, chain: string): Record<string, string> {
+async function gatherMemeData(tokenAddress: string, chain: string): Promise<Record<string, string>> {
   return {
     // Basic token info (name, symbol — for cultural analysis)
-    tokenInfo: runOnchainos(`token info --address ${tokenAddress} --chain ${chain}`),
+    tokenInfo: await runOnchainosAsync(`token info --address ${tokenAddress} --chain ${chain}`),
     // Advanced info (holders, risk, dev history)
-    advancedInfo: runOnchainos(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
+    advancedInfo: await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
     // Price + volume + market cap + 24h change
-    priceInfo: runOnchainos(`token price-info --address ${tokenAddress} --chain ${chain}`),
+    priceInfo: await runOnchainosAsync(`token price-info --address ${tokenAddress} --chain ${chain}`),
     // Top traders — who's buying? Smart money? KOLs? Insiders?
-    smartMoneyTraders: runOnchainos(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 3`),
-    kolTraders: runOnchainos(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 1`),
-    insiderTraders: runOnchainos(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 6`),
-    sniperTraders: runOnchainos(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 7`),
+    smartMoneyTraders: await runOnchainosAsync(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 3`),
+    kolTraders: await runOnchainosAsync(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 1`),
+    insiderTraders: await runOnchainosAsync(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 6`),
+    sniperTraders: await runOnchainosAsync(`token top-trader --address ${tokenAddress} --chain ${chain} --tag-filter 7`),
     // Recent trade history (last 50 trades)
-    recentTrades: runOnchainos(`token trades --address ${tokenAddress} --chain ${chain} --limit 50`),
+    recentTrades: await runOnchainosAsync(`token trades --address ${tokenAddress} --chain ${chain} --limit 50`),
     // Holder distribution
-    holders: runOnchainos(`token holders --address ${tokenAddress} --chain ${chain}`),
+    holders: await runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`),
   };
 }
 
 /**
  * Gather deep meme data including bundle info, dev info, and similar tokens.
  */
-function gatherMemeDeepData(tokenAddress: string, chain: string): Record<string, string> {
-  const base = gatherMemeData(tokenAddress, chain);
+async function gatherMemeDeepData(tokenAddress: string, chain: string): Promise<Record<string, string>> {
+  const base = await gatherMemeData(tokenAddress, chain);
   return {
     ...base,
     // NEW: Bundle/sniper detection
-    bundleInfo: runOnchainos(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`),
+    bundleInfo: await runOnchainosAsync(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`),
     // NEW: Developer wallet analysis
-    devInfo: runOnchainos(`memepump token-dev-info --address ${tokenAddress} --chain ${chain}`),
+    devInfo: await runOnchainosAsync(`memepump token-dev-info --address ${tokenAddress} --chain ${chain}`),
     // NEW: Similar tokens (find copycats or related memes)
-    similarTokens: runOnchainos(`memepump similar-tokens --address ${tokenAddress} --chain ${chain}`),
+    similarTokens: await runOnchainosAsync(`memepump similar-tokens --address ${tokenAddress} --chain ${chain}`),
     // NEW: Detailed memepump token info
-    memepumpDetails: runOnchainos(`memepump token-details --address ${tokenAddress} --chain ${chain}`),
+    memepumpDetails: await runOnchainosAsync(`memepump token-details --address ${tokenAddress} --chain ${chain}`),
   };
 }
 
@@ -280,8 +280,8 @@ async function aiAnalyze(data: Record<string, string>, analysisType: string, cac
 // BASIC MODE — Free, rule-based analysis from OnchainOS data
 // ══════════════════════════════════════════════════════════════
 
-export function basicTechnical(tokenAddress: string, chain = "xlayer"): TechnicalAnalysis {
-  const data = gatherMarketData(tokenAddress, chain);
+export async function basicTechnical(tokenAddress: string, chain = "xlayer"): Promise<TechnicalAnalysis> {
+  const data = await gatherMarketData(tokenAddress, chain);
   const kline = safeJsonParse(data.kline);
   const priceRaw = safeJsonParse(data.price);
 
@@ -353,8 +353,8 @@ export function basicTechnical(tokenAddress: string, chain = "xlayer"): Technica
   return { trend, support, resistance, rsi_14: rsi, volume_trend: volumeTrend };
 }
 
-export function basicFundamental(tokenAddress: string, chain = "xlayer"): FundamentalAnalysis {
-  const data = gatherMarketData(tokenAddress, chain);
+export async function basicFundamental(tokenAddress: string, chain = "xlayer"): Promise<FundamentalAnalysis> {
+  const data = await gatherMarketData(tokenAddress, chain);
   const info = safeJsonParse(data.tokenInfo);
   const holdersRaw = safeJsonParse(data.holders);
   const liqRaw = safeJsonParse(data.liquidity);
@@ -392,8 +392,8 @@ export function basicFundamental(tokenAddress: string, chain = "xlayer"): Fundam
   return { holder_concentration: concentration, honeypot, buy_tax: buyTax, sell_tax: sellTax, liquidity_usd: liquidity };
 }
 
-export function basicSpread(tokenAddress: string, chain = "xlayer"): SpreadAnalysis {
-  const priceRaw = runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`);
+export async function basicSpread(tokenAddress: string, chain = "xlayer"): Promise<SpreadAnalysis> {
+  const priceRaw = await runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`);
   const parsed = safeJsonParse(priceRaw);
   const dexPrice = parseFloat(parsed?.data?.price || parsed?.price || "0");
 
@@ -406,8 +406,8 @@ export function basicSpread(tokenAddress: string, chain = "xlayer"): SpreadAnaly
   };
 }
 
-export function basicMeme(tokenAddress: string, chain = "xlayer"): MemeAnalysis {
-  const data = gatherMemeData(tokenAddress, chain);
+export async function basicMeme(tokenAddress: string, chain = "xlayer"): Promise<MemeAnalysis> {
+  const data = await gatherMemeData(tokenAddress, chain);
 
   const info = safeJsonParse(data.tokenInfo) || {};
   const priceInfo = safeJsonParse(data.priceInfo) || {};
@@ -439,7 +439,7 @@ export function basicMeme(tokenAddress: string, chain = "xlayer"): MemeAnalysis 
   }
 
   // NEW: Check bundle/sniper info
-  const bundleRaw = runOnchainos(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`);
+  const bundleRaw = await runOnchainosAsync(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`);
   const bundleData = safeJsonParse(bundleRaw)?.data || {};
   const bundleHoldingPct = parseFloat(bundleData.bundleHoldingPercent || bundleData.bundlePercent || "0");
   const sniperCount = parseInt(bundleData.snipersTotal || bundleData.sniperCount || "0");
@@ -474,11 +474,11 @@ export function basicMeme(tokenAddress: string, chain = "xlayer"): MemeAnalysis 
   };
 }
 
-export function basicFullAnalysis(tokenAddress: string, chain = "xlayer"): AnalysisReport {
-  const technical = basicTechnical(tokenAddress, chain);
-  const fundamental = basicFundamental(tokenAddress, chain);
-  const spread = basicSpread(tokenAddress, chain);
-  const meme = basicMeme(tokenAddress, chain);
+export async function basicFullAnalysis(tokenAddress: string, chain = "xlayer"): Promise<AnalysisReport> {
+  const technical = await basicTechnical(tokenAddress, chain);
+  const fundamental = await basicFundamental(tokenAddress, chain);
+  const spread = await basicSpread(tokenAddress, chain);
+  const meme = await basicMeme(tokenAddress, chain);
 
   // Simple rule-based recommendation
   let recommendation: "BUY" | "SELL" | "HOLD" | "AVOID" = "HOLD";
@@ -525,7 +525,7 @@ export function basicFullAnalysis(tokenAddress: string, chain = "xlayer"): Analy
 // ══════════════════════════════════════════════════════════════
 
 export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"): Promise<TechnicalAnalysis> {
-  const data = gatherMarketData(tokenAddress, chain);
+  const data = await gatherMarketData(tokenAddress, chain);
   const hasData = Object.values(data).some((v) => v);
 
   if (!hasData) {
@@ -541,7 +541,7 @@ export async function technicalAnalysis(tokenAddress: string, chain = "xlayer"):
 }
 
 export async function fundamentalAnalysis(tokenAddress: string, chain = "xlayer"): Promise<FundamentalAnalysis> {
-  const data = gatherMarketData(tokenAddress, chain);
+  const data = await gatherMarketData(tokenAddress, chain);
   const hasData = Object.values(data).some((v) => v);
 
   if (!hasData) {
@@ -558,8 +558,8 @@ export async function fundamentalAnalysis(tokenAddress: string, chain = "xlayer"
 
 export async function spreadAnalysis(tokenAddress: string, chain = "xlayer"): Promise<SpreadAnalysis> {
   const data: Record<string, string> = {
-    dexPrice: runOnchainos(`market price --address ${tokenAddress} --chain ${chain}`),
-    tokenInfo: runOnchainos(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
+    dexPrice: await runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`),
+    tokenInfo: await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
   };
 
   if (!data.dexPrice) {
@@ -586,7 +586,7 @@ const DEFAULT_MEME: MemeAnalysis = {
 };
 
 export async function memeAnalysis(tokenAddress: string, chain = "xlayer"): Promise<MemeAnalysis> {
-  const data = gatherMemeDeepData(tokenAddress, chain);
+  const data = await gatherMemeDeepData(tokenAddress, chain);
   const hasData = Object.values(data).some((v) => v);
 
   if (!hasData) return DEFAULT_MEME;
