@@ -165,3 +165,77 @@ function mapSignals(items: any[], type: Signal["type"], chain: string): Signal[]
     timestamp: new Date(parseInt(item.timestamp)).toISOString(),
   }));
 }
+
+export async function getHotTokens(chain = "xlayer"): Promise<Signal[]> {
+  const raw = runOnchainos(`token hot-tokens --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const items = parsed?.data;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return [{
+      signal_id: generateSignalId(),
+      type: "trending",
+      token: { symbol: "N/A", address: "", chain },
+      confidence: 0.3,
+      details: { note: `No hot tokens found on ${chain}` },
+      timestamp: new Date().toISOString(),
+    }];
+  }
+
+  return items.slice(0, 20).map((item: any, i: number) => ({
+    signal_id: generateSignalId(),
+    type: "trending" as const,
+    token: {
+      symbol: item.symbol || item.token?.symbol || "UNKNOWN",
+      address: item.tokenAddress || item.token?.tokenAddress || item.address || "",
+      chain,
+    },
+    confidence: Math.max(0.95 - i * 0.03, 0.4),
+    details: {
+      name: item.name || item.token?.name,
+      price: item.price,
+      market_cap: item.marketCapUsd || item.token?.marketCapUsd,
+      volume_24h: item.volume24h,
+      change_24h: item.priceChange24h,
+      hot_score: item.hotScore || item.trendingScore,
+      x_mentions: item.xMentions || item.twitterMentions,
+    },
+    timestamp: new Date().toISOString(),
+  }));
+}
+
+export async function getWalletPnL(walletAddress: string, chain = "xlayer") {
+  const overviewRaw = runOnchainos(`market portfolio-overview --address ${walletAddress} --chain ${chain}`);
+  const historyRaw = runOnchainos(`market portfolio-dex-history --address ${walletAddress} --chain ${chain}`);
+  const recentPnlRaw = runOnchainos(`market portfolio-recent-pnl --address ${walletAddress} --chain ${chain}`);
+
+  const overview = safeJsonParse(overviewRaw)?.data || safeJsonParse(overviewRaw) || {};
+  const history = safeJsonParse(historyRaw)?.data || [];
+  const recentPnl = safeJsonParse(recentPnlRaw)?.data || [];
+
+  return {
+    wallet: walletAddress,
+    chain,
+    overview: {
+      total_pnl_usd: overview.totalPnl || overview.realizedPnl || "0",
+      unrealized_pnl_usd: overview.unrealizedPnl || "0",
+      win_rate: overview.winRate || overview.winRatio || "0",
+      total_trades: overview.totalTrades || overview.txCount || 0,
+      best_trade_pnl: overview.bestTradePnl || "0",
+      worst_trade_pnl: overview.worstTradePnl || "0",
+    },
+    recent_pnl: Array.isArray(recentPnl) ? recentPnl.slice(0, 10).map((p: any) => ({
+      token: p.tokenSymbol || p.symbol || "UNKNOWN",
+      pnl_usd: p.pnl || p.realizedPnl || "0",
+      roi_pct: p.roi || p.roiPercent || "0",
+    })) : [],
+    recent_trades: Array.isArray(history) ? history.slice(0, 10).map((tx: any) => ({
+      type: tx.type || tx.side || "swap",
+      token_in: tx.fromToken?.symbol || tx.tokenIn || "",
+      token_out: tx.toToken?.symbol || tx.tokenOut || "",
+      amount_usd: tx.amountUsd || tx.valueUsd || "0",
+      timestamp: tx.timestamp || tx.blockTime || "",
+    })) : [],
+    timestamp: new Date().toISOString(),
+  };
+}

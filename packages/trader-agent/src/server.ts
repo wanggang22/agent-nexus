@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress } from "./executor.js";
+import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress, getApproval, getGasPrice, getLiquiditySources } from "./executor.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Trader Agent";
@@ -77,6 +77,42 @@ app.get("/trade/status/:orderId", async (req, res) => {
   }
 });
 
+app.post("/trade/approve", async (req, res) => {
+  try {
+    const { token, wallet_address, amount, chain } = req.body;
+    if (!token || !wallet_address) {
+      return res.status(400).json({ error: "token and wallet_address required" });
+    }
+    const result = await getApproval(token, wallet_address, amount || "0", chain);
+    recordCall(AGENT, "approve", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/trade/gas", async (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = await getGasPrice(chain);
+    recordCall(AGENT, "gas", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/trade/liquidity-sources", async (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = await getLiquiditySources(chain);
+    recordCall(AGENT, "liquidity-sources", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = parseInt(process.env.PORT || "4004");
 const server = app.listen(PORT, () => {
   console.log(`\n💹 ${AGENT} running on http://localhost:${PORT}`);
@@ -84,6 +120,9 @@ const server = app.listen(PORT, () => {
   console.log(`   All services FREE (powered by OnchainOS)`);
   console.log(`   POST /trade/quote           (free)`);
   console.log(`   POST /trade/execute         (free)`);
-  console.log(`   GET  /trade/status/:orderId (free)\n`);
+  console.log(`   GET  /trade/status/:orderId (free)`);
+  console.log(`   POST /trade/approve          (free)`);
+  console.log(`   GET  /trade/gas              (free)`);
+  console.log(`   GET  /trade/liquidity-sources (free)\n`);
 });
 setupGracefulShutdown(server, AGENT);

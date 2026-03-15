@@ -95,6 +95,18 @@ app.get("/basic/full/:token", (req, res) => {
   }
 });
 
+// Basic meme with bundle/sniper detection (FREE, more OnchainOS commands)
+app.get("/basic/meme-deep/:token", (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = basicMeme(req.params.token, chain);
+    recordCall(AGENT, "basic-meme-deep", 0);
+    res.json({ mode: "basic-deep", ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Deep mode (PAID): Claude AI-powered analysis ──
 app.get("/analysis/technical/:token", async (req, res) => {
   try {

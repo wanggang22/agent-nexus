@@ -263,3 +263,76 @@ export async function getOrderStatus(orderId: string, chain = "xlayer", txHash?:
 export function getWalletAddress(): string {
   return account.address;
 }
+
+/**
+ * Get ERC-20 token approval transaction data.
+ * Required before swapping tokens that need allowance.
+ */
+export async function getApproval(
+  tokenAddress: string,
+  walletAddress: string,
+  amount: string,
+  chain = "xlayer"
+) {
+  const raw = runOnchainos(
+    `swap approve --token ${tokenAddress} --wallet ${walletAddress} --amount ${amount} --chain ${chain}`
+  );
+
+  if (!raw) {
+    return { needs_approval: false, note: "Native token or approval not required" };
+  }
+
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data?.[0] || parsed?.data || parsed;
+
+  return {
+    needs_approval: true,
+    tx: {
+      to: data?.to || tokenAddress,
+      data: data?.data || data?.calldata || "",
+      value: "0",
+    },
+  };
+}
+
+/**
+ * Get current gas prices for a chain.
+ */
+export async function getGasPrice(chain = "xlayer") {
+  const raw = runOnchainos(`gateway gas --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data || parsed || {};
+
+  return {
+    chain,
+    gas_prices: {
+      slow: data.slow || data.safeLow || "0",
+      standard: data.standard || data.average || "0",
+      fast: data.fast || "0",
+      instant: data.instant || data.fastest || "0",
+    },
+    base_fee: data.baseFee || "0",
+    unit: "gwei",
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Get available DEX liquidity sources on a chain.
+ */
+export async function getLiquiditySources(chain = "xlayer") {
+  const raw = runOnchainos(`swap liquidity --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const sources = parsed?.data || parsed || [];
+
+  return {
+    chain,
+    sources: Array.isArray(sources) ? sources.map((s: any) => ({
+      name: s.name || s.dexName || "Unknown",
+      id: s.id || s.dexId || "",
+      logo: s.logo || "",
+    })) : [],
+    count: Array.isArray(sources) ? sources.length : 0,
+    timestamp: new Date().toISOString(),
+  };
+}

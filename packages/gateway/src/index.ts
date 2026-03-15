@@ -84,6 +84,8 @@ const AGENTS = [
       { method: "GET", route: "/signals/whale-alert", price: "free", description: "Whale movement alerts" },
       { method: "GET", route: "/signals/meme-scan", price: "free", description: "New meme token scan" },
       { method: "GET", route: "/signals/trending", price: "free", description: "Trending tokens" },
+      { method: "GET", route: "/signals/hot-tokens", price: "free", description: "Hot tokens by trending score / X mentions" },
+      { method: "GET", route: "/signals/wallet-pnl", price: "free", description: "Wallet PnL overview + trade history" },
     ],
   },
   {
@@ -96,6 +98,7 @@ const AGENTS = [
       { method: "GET", route: "/basic/spread/:token", price: "free", description: "Basic DEX price info" },
       { method: "GET", route: "/basic/meme/:token", price: "free", description: "Basic meme data (smart money, KOL, risks)" },
       { method: "GET", route: "/basic/full/:token", price: "free", description: "Basic full analysis (all dimensions, rule-based)" },
+      { method: "GET", route: "/basic/meme-deep/:token", price: "free", description: "Meme deep data: bundle/sniper detection + dev info" },
     ],
   },
   {
@@ -128,6 +131,9 @@ const AGENTS = [
       { method: "POST", route: "/trade/quote", price: "free", description: "Get optimal trade quote" },
       { method: "POST", route: "/trade/execute", price: "free", description: "Execute trade" },
       { method: "GET", route: "/trade/status/:orderId", price: "free", description: "Track order status" },
+      { method: "POST", route: "/trade/approve", price: "free", description: "ERC-20 token approval" },
+      { method: "GET", route: "/trade/gas", price: "free", description: "Current gas prices" },
+      { method: "GET", route: "/trade/liquidity-sources", price: "free", description: "Available DEX liquidity sources" },
     ],
   },
 ];
@@ -174,12 +180,15 @@ SIGNAL (free):
 - GET /signals/whale-alert — whale movement alerts
 - GET /signals/meme-scan — new meme token scan
 - GET /signals/trending — trending tokens
+- GET /signals/hot-tokens — hot tokens ranked by trending score / X mentions
+- GET /signals/wallet-pnl?wallet={wallet} — wallet PnL, win rate, trade history
 
 ANALYST BASIC (free, rule-based):
 - GET /basic/technical/{token} — basic technical analysis
 - GET /basic/fundamental/{token} — basic fundamental analysis
 - GET /basic/spread/{token} — basic price data
 - GET /basic/meme/{token} — basic meme data (smart money, KOL, risks)
+- GET /basic/meme-deep/{token} — meme deep data: bundle/sniper detection + dev info
 - GET /basic/full/{token} — basic full analysis
 
 ANALYST DEEP (paid, Claude AI):
@@ -197,6 +206,9 @@ RISK (free):
 TRADER (free):
 - POST /trade/quote (body: {from_token, to_token, amount}) — get quote
 - POST /trade/execute (body: {from_token, to_token, amount}) — execute trade
+- POST /trade/approve (body: {token, wallet_address, amount}) — ERC-20 approval
+- GET /trade/gas — current gas prices
+- GET /trade/liquidity-sources — available DEX sources
 
 Rules:
 - Extract token symbols (ETH, OKB, USDT...) or addresses (0x...) from the message.
@@ -209,8 +221,11 @@ Rules:
 - For "full analysis", "全面分析" without "deep" → basic/full (free)
 - For "深度分析", "deep analysis", "AI analysis" → analysis/full (paid)
 - For "smart money", "聪明钱", "whale", "鲸鱼" → signals/smart-money or whale-alert
-- For "trending", "热门" → signals/trending
+- For "trending", "热门", "hot", "火" → signals/hot-tokens (preferred) or signals/trending
+- For "PnL", "盈亏", "win rate", "胜率", "我的交易", "trade history" → signals/wallet-pnl (use user's wallet)
+- For "bundle", "sniper", "捆绑", "狙击" → basic/meme-deep (more data than basic/meme)
 - For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
+- For "gas", "手续费" → trade/gas
 - For "portfolio risk", "持仓风险" → risk/portfolio
 - Default chain: xlayer.
 - Max 3 calls. If user wants comprehensive view, combine risk + analyst.

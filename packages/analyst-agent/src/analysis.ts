@@ -82,6 +82,24 @@ function gatherMemeData(tokenAddress: string, chain: string): Record<string, str
   };
 }
 
+/**
+ * Gather deep meme data including bundle info, dev info, and similar tokens.
+ */
+function gatherMemeDeepData(tokenAddress: string, chain: string): Record<string, string> {
+  const base = gatherMemeData(tokenAddress, chain);
+  return {
+    ...base,
+    // NEW: Bundle/sniper detection
+    bundleInfo: runOnchainos(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`),
+    // NEW: Developer wallet analysis
+    devInfo: runOnchainos(`memepump token-dev-info --address ${tokenAddress} --chain ${chain}`),
+    // NEW: Similar tokens (find copycats or related memes)
+    similarTokens: runOnchainos(`memepump similar-tokens --address ${tokenAddress} --chain ${chain}`),
+    // NEW: Detailed memepump token info
+    memepumpDetails: runOnchainos(`memepump token-details --address ${tokenAddress} --chain ${chain}`),
+  };
+}
+
 function extractJson(text: string): string {
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (codeBlockMatch) return codeBlockMatch[1].trim();
@@ -420,9 +438,17 @@ export function basicMeme(tokenAddress: string, chain = "xlayer"): MemeAnalysis 
     else sentiment = "holding";
   }
 
+  // NEW: Check bundle/sniper info
+  const bundleRaw = runOnchainos(`memepump token-bundle-info --address ${tokenAddress} --chain ${chain}`);
+  const bundleData = safeJsonParse(bundleRaw)?.data || {};
+  const bundleHoldingPct = parseFloat(bundleData.bundleHoldingPercent || bundleData.bundlePercent || "0");
+  const sniperCount = parseInt(bundleData.snipersTotal || bundleData.sniperCount || "0");
+
   const riskFactors: string[] = [];
   if (insiderList.length > 3) riskFactors.push("insider_heavy");
   if (smList.length === 0 && kolList.length === 0) riskFactors.push("no_community");
+  if (bundleHoldingPct > 30) riskFactors.push("bundle_suspicious");
+  if (sniperCount > 10) riskFactors.push("insider_heavy");
 
   // Holder distribution check
   const holderList = Array.isArray(holders.data) ? holders.data : [];
@@ -560,7 +586,7 @@ const DEFAULT_MEME: MemeAnalysis = {
 };
 
 export async function memeAnalysis(tokenAddress: string, chain = "xlayer"): Promise<MemeAnalysis> {
-  const data = gatherMemeData(tokenAddress, chain);
+  const data = gatherMemeDeepData(tokenAddress, chain);
   const hasData = Object.values(data).some((v) => v);
 
   if (!hasData) return DEFAULT_MEME;

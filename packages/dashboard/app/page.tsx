@@ -83,6 +83,9 @@ export default function Dashboard() {
   const [chatLoading, setChatLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [pendingTrade, setPendingTrade] = useState<any>(null);
+  const [walletPnL, setWalletPnL] = useState<any>(null);
+  const [hotTokens, setHotTokens] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<"chat" | "hot" | "pnl">("chat");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +106,17 @@ export default function Dashboard() {
       });
     }
     fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
+    // Fetch hot tokens
+    fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).then(d => {
+      if (d.signals) setHotTokens(d.signals.slice(0, 10));
+    }).catch(() => {});
   }, [twitterId]);
+
+  // Fetch wallet PnL when wallet is available
+  useEffect(() => {
+    if (!wallet) return;
+    fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
+  }, [wallet]);
 
   const handleCreateWallet = () => {
     const { address, privateKey } = createLocalWallet();
@@ -636,6 +649,154 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* ── Tab Navigation ── */}
+        <div className="flex gap-1 bg-nexus-card rounded-xl p-1 border border-nexus-border">
+          {([
+            { id: "chat" as const, label: "Chat", icon: <IconChat /> },
+            { id: "hot" as const, label: "Hot Tokens", icon: <IconBolt /> },
+            { id: "pnl" as const, label: "PnL", icon: <IconChart /> },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? "bg-nexus-accent text-white shadow-md"
+                  : "text-nexus-muted hover:text-white"
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Hot Tokens Panel ── */}
+        {activeTab === "hot" && (
+          <div className="card !p-0 overflow-hidden animate-fade-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-nexus-border">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400">
+                  <IconBolt />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-sm">Hot Tokens</h2>
+                  <p className="text-[10px] text-nexus-muted">Ranked by trending score & X mentions</p>
+                </div>
+              </div>
+              <button
+                onClick={() => fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).then(d => { if (d.signals) setHotTokens(d.signals.slice(0, 10)); })}
+                className="btn-ghost text-xs"
+              >Refresh</button>
+            </div>
+            <div className="divide-y divide-nexus-border">
+              {hotTokens.length === 0 ? (
+                <div className="p-8 text-center text-nexus-muted text-sm">No hot tokens data</div>
+              ) : (
+                hotTokens.map((t: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-nexus-card-hover transition-colors">
+                    <span className="text-nexus-muted text-xs w-5 text-right">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-medium text-sm truncate">{t.token?.symbol || "?"}</span>
+                        {t.details?.name && <span className="text-nexus-muted text-xs truncate">{t.details.name}</span>}
+                      </div>
+                      <div className="flex gap-3 mt-0.5">
+                        {t.details?.market_cap && <span className="text-[10px] text-nexus-muted">MCap: ${Number(t.details.market_cap).toLocaleString()}</span>}
+                        {t.details?.volume_24h && <span className="text-[10px] text-nexus-muted">Vol: ${Number(t.details.volume_24h).toLocaleString()}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {t.details?.change_24h && (
+                        <span className={`text-xs font-medium ${parseFloat(t.details.change_24h) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
+                          {parseFloat(t.details.change_24h) >= 0 ? "+" : ""}{parseFloat(t.details.change_24h).toFixed(1)}%
+                        </span>
+                      )}
+                      {t.details?.hot_score && <div className="text-[10px] text-nexus-muted">Score: {t.details.hot_score}</div>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── PnL Panel ── */}
+        {activeTab === "pnl" && (
+          <div className="card !p-0 overflow-hidden animate-fade-in">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-nexus-border">
+              <div className="w-8 h-8 rounded-lg bg-nexus-green/10 flex items-center justify-center text-nexus-green">
+                <IconChart />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-sm">Wallet PnL</h2>
+                <p className="text-[10px] text-nexus-muted">{wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "No wallet"}</p>
+              </div>
+            </div>
+            {!wallet ? (
+              <div className="p-8 text-center text-nexus-muted text-sm">Create or import a wallet to see PnL</div>
+            ) : !walletPnL ? (
+              <div className="p-8 text-center text-nexus-muted text-sm">Loading PnL data...</div>
+            ) : (
+              <div className="p-5 space-y-5">
+                {/* Overview Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: "Total PnL", value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
+                    { label: "Unrealized", value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
+                    { label: "Win Rate", value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
+                    { label: "Total Trades", value: walletPnL.overview?.total_trades || "0", color: "text-white" },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-nexus-bg rounded-xl p-3 border border-nexus-border">
+                      <div className="stat-label">{s.label}</div>
+                      <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recent Token PnL */}
+                {walletPnL.recent_pnl?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs text-nexus-muted uppercase tracking-wider mb-2">Recent Token PnL</h3>
+                    <div className="space-y-1">
+                      {walletPnL.recent_pnl.map((p: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-nexus-bg transition-colors">
+                          <span className="text-sm text-white">{p.token}</span>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-medium ${parseFloat(p.pnl_usd) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
+                              {parseFloat(p.pnl_usd) >= 0 ? "+" : ""}${p.pnl_usd}
+                            </span>
+                            <span className={`text-xs ${parseFloat(p.roi_pct) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
+                              {parseFloat(p.roi_pct) >= 0 ? "+" : ""}{p.roi_pct}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Trades */}
+                {walletPnL.recent_trades?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs text-nexus-muted uppercase tracking-wider mb-2">Recent Trades</h3>
+                    <div className="space-y-1">
+                      {walletPnL.recent_trades.map((tx: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-nexus-bg transition-colors text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="price-tag">{tx.type}</span>
+                            <span className="text-white">{tx.token_in} → {tx.token_out}</span>
+                          </div>
+                          <span className="text-nexus-muted">${tx.amount_usd}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Pending Trade Alert ── */}
         {pendingTrade && unlocked && (
           <div className="card border-nexus-yellow/30 bg-nexus-yellow/5 animate-fade-in">
@@ -655,7 +816,7 @@ export default function Dashboard() {
         )}
 
         {/* ── Chat ── */}
-        <div className="card !p-0 overflow-hidden">
+        {activeTab === "chat" && <div className="card !p-0 overflow-hidden animate-fade-in">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-nexus-border">
             <div className="w-8 h-8 rounded-lg bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light">
               <IconChat />
@@ -745,7 +906,7 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Footer */}
         <div className="text-center text-[10px] text-nexus-muted py-4">

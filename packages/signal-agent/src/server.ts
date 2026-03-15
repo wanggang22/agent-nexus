@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { getSmartMoneySignals, getWhaleAlerts, getMemeScan, getTrendingTokens } from "./scanner.js";
+import { getSmartMoneySignals, getWhaleAlerts, getMemeScan, getTrendingTokens, getHotTokens, getWalletPnL } from "./scanner.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Signal Agent";
@@ -62,6 +62,30 @@ app.get("/signals/trending", async (req, res) => {
   }
 });
 
+app.get("/signals/hot-tokens", async (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const signals = await getHotTokens(chain);
+    recordCall(AGENT, "hot-tokens", 0);
+    res.json({ signals, count: signals.length, chain });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/signals/wallet-pnl", async (req, res) => {
+  try {
+    const wallet = req.query.wallet as string;
+    const chain = (req.query.chain as string) || "xlayer";
+    if (!wallet) return res.status(400).json({ error: "wallet address required" });
+    const result = await getWalletPnL(wallet, chain);
+    recordCall(AGENT, "wallet-pnl", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = parseInt(process.env.PORT || "4001");
 const server = app.listen(PORT, () => {
   console.log(`\n📡 ${AGENT} running on http://localhost:${PORT}`);
@@ -70,6 +94,8 @@ const server = app.listen(PORT, () => {
   console.log(`   GET /signals/smart-money  (free)`);
   console.log(`   GET /signals/whale-alert  (free)`);
   console.log(`   GET /signals/meme-scan    (free)`);
-  console.log(`   GET /signals/trending     (free)\n`);
+  console.log(`   GET /signals/trending     (free)`);
+  console.log(`   GET /signals/hot-tokens   (free)`);
+  console.log(`   GET /signals/wallet-pnl   (free)\n`);
 });
 setupGracefulShutdown(server, AGENT);
