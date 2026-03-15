@@ -122,7 +122,7 @@ export function confirmWallet(
   platform: "telegram" | "twitter" | "api",
   userId: string,
   password: string
-): { success: boolean; error?: string } {
+): { success: boolean; error?: string; privateKey?: string } {
   const key = `${platform}_${userId}`;
 
   if (store[key]) {
