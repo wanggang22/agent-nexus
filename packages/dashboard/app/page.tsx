@@ -926,7 +926,10 @@ export default function Dashboard() {
             {/* Token Data Panel */}
             <div className="w-80 border-r border-nexus-border overflow-y-auto shrink-0 hidden lg:block">
               <div className="p-4 border-b border-nexus-border">
-                <h2 className="text-lg font-bold text-white">{currentTokenSymbol}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white">{currentTokenSymbol}</h2>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-accent/15 text-nexus-accent-light">{selectedChain}</span>
+                </div>
                 <p className="text-[10px] text-nexus-muted font-mono truncate">{currentChat.address}</p>
               </div>
 
