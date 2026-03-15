@@ -16,6 +16,98 @@ import {
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
+// ── i18n ──
+const LANG: Record<string, Record<string, string>> = {
+  en: {
+    hotTokens: "Hot Tokens", smartMoney: "Smart Money", whaleAlerts: "Whale Alerts",
+    memeScanner: "Meme Scanner", search: "Search", overview: "Overview", wallet: "Wallet",
+    market: "MARKET", tools: "TOOLS", tokenChats: "TOKEN CHATS",
+    refresh: "Refresh", disconnect: "Disconnect", logout: "Logout",
+    connectOKX: "Connect OKX Wallet", createLocal: "Create Local Wallet",
+    importKey: "Import Private Key", unlockWallet: "Unlock Wallet",
+    setPassword: "Set Password", unlock: "Unlock", cancel: "Cancel",
+    approve: "Approve", approving: "Approving...",
+    hotDesc: "Trending tokens by volume & mentions",
+    smartDesc: "What smart money wallets are buying",
+    whaleDesc: "Large transactions (>$10k)",
+    memeDesc: "New meme tokens launching", searchDesc: "Find any token",
+    analyzeWith: "Analyze with AI", refreshData: "Refresh Data",
+    aiChat: "AI Strategy Chat", askAbout: "Ask about",
+    noData: "No data for", tryChain: "Try another chain.",
+    loading: "Loading", connecting: "Connecting...",
+    totalCalls: "Total Calls", revenue: "Revenue",
+    walletPnl: "Wallet PnL", totalPnl: "Total PnL",
+    unrealized: "Unrealized", winRate: "Win Rate", trades: "Trades",
+    usdcBalance: "USDC Balance", approved: "Approved", costPerCall: "Cost per call",
+    autoPayment: "Auto-payment enabled · No confirmation needed",
+    approveOnce: "Approve once → all AI analysis auto-deduct",
+    unlockFirst: "Unlock wallet first",
+    saveKey: "Save Your Private Key", savedKey: "I have saved my private key",
+    continue: "Continue", signIn: "Sign In",
+    heroTitle1: "AI-Powered", heroTitle2: "On-Chain Strategy.",
+    heroDesc: "Real-time on-chain data meets AI analysis. Build trading strategies per token, track smart money, and execute — all with natural language.",
+    getStarted: "Get Started", loginX: "Login with X",
+    feat1: "Hot Meme Feed", feat1d: "Real-time trending tokens, smart money signals, and meme scanner powered by OnchainOS.",
+    feat2: "Per-Token AI Chat", feat2d: "Each token gets its own AI context. Build analysis logic and buy/sell strategies through conversation.",
+    feat3: "Full On-Chain Intel", feat3d: "39 OnchainOS commands: holder analysis, whale tracking, bundle detection, PnL, and more.",
+    okxWalletConnected: "OKX Wallet Connected", locked: "Locked", unlocked: "Unlocked",
+    keyEncrypted: "Key encrypted in browser", okxGas: "0 Gas x402 · OKX Wallet",
+    analyze: "Analyze", askAI: "analysis, strategies, buy/sell signals",
+    quickBuy: "Buy timing", quickSafe: "safe to buy?", quickDeep: "Deep analysis",
+    quickSmart: "Smart money buying?", quickStop: "Stop-loss strategy", quickCompare: "Compare similar",
+    technical: "TECHNICAL", fundamental: "FUNDAMENTAL", riskAssessment: "RISK ASSESSMENT",
+    memeIntel: "MEME INTEL", signal: "Signal",
+    trend: "Trend", volume: "Volume", honeypot: "Honeypot", holders: "Holders",
+    liquidity: "Liquidity", tax: "Tax", level: "Level",
+    price: "Price", mcap: "MCap", vol: "Vol", change24h: "24h",
+    wallets: "Wallets", amount: "Amount", score: "Score",
+  },
+  zh: {
+    hotTokens: "热门代币", smartMoney: "聪明钱", whaleAlerts: "鲸鱼监控",
+    memeScanner: "Meme扫描", search: "搜索", overview: "总览", wallet: "钱包",
+    market: "市场", tools: "工具", tokenChats: "代币对话",
+    refresh: "刷新", disconnect: "断开", logout: "退出",
+    connectOKX: "连接 OKX 钱包", createLocal: "创建本地钱包",
+    importKey: "导入私钥", unlockWallet: "解锁钱包",
+    setPassword: "设置密码", unlock: "解锁", cancel: "取消",
+    approve: "授权", approving: "授权中...",
+    hotDesc: "按交易量和热度排名的代币",
+    smartDesc: "聪明钱钱包正在买什么",
+    whaleDesc: "大额交易 (>$10k)",
+    memeDesc: "新上线的 Meme 代币", searchDesc: "搜索任意代币",
+    analyzeWith: "AI 分析", refreshData: "刷新数据",
+    aiChat: "AI 策略聊天", askAbout: "询问",
+    noData: "暂无数据", tryChain: "试试其他链",
+    loading: "加载中", connecting: "连接中...",
+    totalCalls: "总调用数", revenue: "收入",
+    walletPnl: "钱包盈亏", totalPnl: "总盈亏",
+    unrealized: "未实现", winRate: "胜率", trades: "交易数",
+    usdcBalance: "USDC 余额", approved: "已授权", costPerCall: "单次费用",
+    autoPayment: "自动扣款已开启 · 无需确认",
+    approveOnce: "授权一次 → AI分析自动扣款",
+    unlockFirst: "请先解锁钱包",
+    saveKey: "保存你的私钥", savedKey: "我已安全保存私钥",
+    continue: "继续", signIn: "登录",
+    heroTitle1: "AI 驱动的", heroTitle2: "链上策略平台",
+    heroDesc: "实时链上数据 + AI 分析。逐币构建交易策略，追踪聪明钱，自然语言执行交易。",
+    getStarted: "开始使用", loginX: "X 登录",
+    feat1: "热点 Meme", feat1d: "OnchainOS 驱动的实时热门代币、聪明钱信号和 Meme 扫描。",
+    feat2: "逐币 AI 对话", feat2d: "每个代币独立 AI 上下文，通过对话构建分析逻辑和买卖策略。",
+    feat3: "全链上情报", feat3d: "39 个 OnchainOS 命令：持仓分析、鲸鱼追踪、捆绑检测、盈亏等。",
+    okxWalletConnected: "OKX 钱包已连接", locked: "已锁定", unlocked: "已解锁",
+    keyEncrypted: "私钥在浏览器中加密", okxGas: "0 Gas x402 · OKX 钱包",
+    analyze: "分析", askAI: "分析、策略、买卖信号",
+    quickBuy: "买入时机", quickSafe: "安全吗？", quickDeep: "深度分析",
+    quickSmart: "聪明钱在买吗？", quickStop: "止损策略", quickCompare: "同类对比",
+    technical: "技术面", fundamental: "基本面", riskAssessment: "风险评估",
+    memeIntel: "MEME 情报", signal: "信号",
+    trend: "趋势", volume: "成交量", honeypot: "蜜罐", holders: "持仓",
+    liquidity: "流动性", tax: "税", level: "等级",
+    price: "价格", mcap: "市值", vol: "成交量", change24h: "24h涨跌",
+    wallets: "钱包数", amount: "金额", score: "评分",
+  },
+};
+
 // ── Types ──
 interface TokenChat {
   symbol: string;
@@ -67,6 +159,18 @@ export default function Dashboard() {
   const [usdcAllowance, setUsdcAllowance] = useState<string>("0");
   const [platformWallet, setPlatformWallet] = useState<string>("");
   const [approving, setApproving] = useState(false);
+
+  // ── Language ──
+  const [lang, setLang] = useState<"en" | "zh">(() => {
+    if (typeof window === "undefined") return "zh";
+    return (localStorage.getItem("agentnexus_lang") as "en" | "zh") || "zh";
+  });
+  const t = LANG[lang];
+  const toggleLang = () => {
+    const next = lang === "en" ? "zh" : "en";
+    setLang(next);
+    localStorage.setItem("agentnexus_lang", next);
+  };
 
   // ── Navigation State ──
   const [activeView, setActiveView] = useState<string>("hot"); // "hot", "smart", "whale", "meme", "wallet", "overview", "search", or "token:SYMBOL"
@@ -585,14 +689,14 @@ export default function Dashboard() {
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-2">
           {/* MARKET section */}
-          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-1">Market</div>}
+          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-1">{t.market}</div>}
 
           {[
-            { id: "hot", icon: <IconFire />, label: "Hot Tokens", action: () => fetchHotTokens() },
-            { id: "smart", icon: <Icon d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: "Smart Money", action: () => fetchSmartMoney() },
-            { id: "whale", icon: <Icon d="M20.893 13.393l-1.135-1.135a2.252 2.252 0 0 1-.421-.585l-1.08-2.16a.414.414 0 0 0-.663-.107.827.827 0 0 1-.812.21l-1.273-.363a.89.89 0 0 0-.738 1.595l.587.39c.59.395.674 1.23.172 1.732l-.2.2c-.212.212-.33.498-.33.796v.41c0 .409-.11.809-.32 1.158l-1.315 2.191a2.11 2.11 0 0 1-1.81 1.025 1.055 1.055 0 0 1-1.055-1.055v-1.172c0-.92-.56-1.747-1.414-2.089l-.655-.261a2.25 2.25 0 0 1-1.383-2.46l.007-.042a2.25 2.25 0 0 1 .29-.787l.082-.147a2.25 2.25 0 0 1 3.577-.459M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: "Whale Alerts", action: () => fetchWhaleAlerts() },
-            { id: "meme", icon: <Icon d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />, label: "Meme Scanner", action: () => fetchMemeScanner() },
-            { id: "search", icon: <Icon d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />, label: "Search", action: () => {} },
+            { id: "hot", icon: <IconFire />, label: t.hotTokens, action: () => fetchHotTokens() },
+            { id: "smart", icon: <Icon d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: t.smartMoney, action: () => fetchSmartMoney() },
+            { id: "whale", icon: <Icon d="M20.893 13.393l-1.135-1.135a2.252 2.252 0 0 1-.421-.585l-1.08-2.16a.414.414 0 0 0-.663-.107.827.827 0 0 1-.812.21l-1.273-.363a.89.89 0 0 0-.738 1.595l.587.39c.59.395.674 1.23.172 1.732l-.2.2c-.212.212-.33.498-.33.796v.41c0 .409-.11.809-.32 1.158l-1.315 2.191a2.11 2.11 0 0 1-1.81 1.025 1.055 1.055 0 0 1-1.055-1.055v-1.172c0-.92-.56-1.747-1.414-2.089l-.655-.261a2.25 2.25 0 0 1-1.383-2.46l.007-.042a2.25 2.25 0 0 1 .29-.787l.082-.147a2.25 2.25 0 0 1 3.577-.459M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: t.whaleAlerts, action: () => fetchWhaleAlerts() },
+            { id: "meme", icon: <Icon d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />, label: t.memeScanner, action: () => fetchMemeScanner() },
+            { id: "search", icon: <Icon d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />, label: t.search, action: () => {} },
           ].map(nav => (
             <button key={nav.id}
               onClick={() => { setActiveView(nav.id); nav.action(); }}
@@ -606,7 +710,7 @@ export default function Dashboard() {
           ))}
 
           {/* TOOLS section */}
-          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-4">Tools</div>}
+          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-4">{t.tools}</div>}
 
           <button
             onClick={() => setActiveView("overview")}
@@ -615,7 +719,7 @@ export default function Dashboard() {
             }`}
           >
             <IconChart />
-            {sidebarOpen && <span>Overview</span>}
+            {sidebarOpen && <span>{t.overview}</span>}
           </button>
 
           <button
@@ -627,7 +731,7 @@ export default function Dashboard() {
             <IconWallet />
             {sidebarOpen && (
               <div className="flex-1 flex items-center justify-between">
-                <span>Wallet</span>
+                <span>{t.wallet}</span>
                 {wallet && (
                   <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
                 )}
@@ -663,6 +767,14 @@ export default function Dashboard() {
         </nav>
 
         {/* User */}
+        {/* Language Toggle */}
+        <div className="px-3 py-2 shrink-0">
+          <button onClick={toggleLang}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] bg-nexus-bg border border-nexus-border text-nexus-muted hover:text-white transition-all">
+            {lang === "zh" ? "EN / 中" : "中 / EN"}
+          </button>
+        </div>
+
         <div className="border-t border-nexus-border p-3 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs shrink-0">
@@ -675,7 +787,7 @@ export default function Dashboard() {
                   if (walletMode === "okx") { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }
                   else { signOut(); }
                 }} className="text-[10px] text-nexus-muted hover:text-white">
-                  {walletMode === "okx" ? "Disconnect" : "Logout"}
+                  {walletMode === "okx" ? t.disconnect : t.logout}
                 </button>
               </div>
             )}
@@ -694,10 +806,10 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h1 className="text-xl font-bold text-white">
-                    {activeView === "hot" ? "Hot Tokens" : activeView === "smart" ? "Smart Money" : activeView === "whale" ? "Whale Alerts" : activeView === "meme" ? "Meme Scanner" : "Search"}
+                    {activeView === "hot" ? t.hotTokens : activeView === "smart" ? t.smartMoney : activeView === "whale" ? t.whaleAlerts : activeView === "meme" ? t.memeScanner : t.search}
                   </h1>
                   <p className="text-xs text-nexus-muted mt-0.5">
-                    {activeView === "hot" ? "Trending tokens by volume & mentions" : activeView === "smart" ? "What smart money wallets are buying" : activeView === "whale" ? "Large transactions (>$10k)" : activeView === "meme" ? "New meme tokens launching" : "Find any token"}
+                    {activeView === "hot" ? t.hotDesc : activeView === "smart" ? t.smartDesc : activeView === "whale" ? t.whaleDesc : activeView === "meme" ? t.memeDesc : t.searchDesc}
                   </p>
                 </div>
                 <button onClick={() => {
@@ -705,7 +817,7 @@ export default function Dashboard() {
                   else if (activeView === "smart") fetchSmartMoney();
                   else if (activeView === "whale") fetchWhaleAlerts();
                   else if (activeView === "meme") fetchMemeScanner();
-                }} className="btn-secondary text-xs py-2 px-4">Refresh</button>
+                }} className="btn-secondary text-xs py-2 px-4">{t.refresh}</button>
               </div>
 
               {/* Chain Tabs */}
