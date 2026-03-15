@@ -324,7 +324,13 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: contextMsg, platform: walletMode === "okx" ? "api" : "twitter", user_id: userId }),
       });
-      const data = await resp.json();
+      let data: any;
+      try {
+        const text = await resp.text();
+        data = JSON.parse(text);
+      } catch {
+        data = { reply: "AI is processing... please try again." };
+      }
 
       // Check for trade
       const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
