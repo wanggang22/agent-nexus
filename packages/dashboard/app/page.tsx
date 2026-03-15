@@ -193,7 +193,7 @@ export default function Dashboard() {
       const resp = await fetch(`${GATEWAY}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: contextMsg, platform: "twitter", user_id: twitterId }),
+        body: JSON.stringify({ message: contextMsg, platform: walletMode === "okx" ? "api" : "twitter", user_id: userId }),
       });
       const data = await resp.json();
 
@@ -261,6 +261,25 @@ export default function Dashboard() {
     }
   };
 
+  // ── Determine if user is "logged in" (Twitter OR OKX Wallet) ──
+  const isLoggedIn = !!session || !!wallet;
+  const userId = twitterId || (wallet ? `wallet_${wallet.slice(0, 8)}` : null);
+  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+
+  // OKX Wallet login from landing page (no Twitter needed)
+  const handleOKXLogin = async () => {
+    const result = await connectOKXWallet();
+    if (result) {
+      setWallet(result.address);
+      setWalletMode("okx");
+      setUnlocked(true);
+      // Fetch data after wallet connect
+      fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
+      fetchHotTokens();
+      fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${result.address}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
+    }
+  };
+
   // ── Loading ──
   if (status === "loading") {
     return (
@@ -273,7 +292,7 @@ export default function Dashboard() {
   // ══════════════════════════════════════════════════════════════
   // ██  LOGIN PAGE
   // ══════════════════════════════════════════════════════════════
-  if (!session) {
+  if (!isLoggedIn) {
     return (
       <main className="min-h-screen bg-nexus-bg relative overflow-hidden">
         <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
@@ -306,9 +325,16 @@ export default function Dashboard() {
               Real-time on-chain data meets AI analysis. Build trading strategies per token,
               track smart money, and execute — all with natural language.
             </p>
-            <button onClick={() => signIn("twitter")} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
-              <IconX /> Get Started
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button onClick={handleOKXLogin} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
+                <span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span>
+                Connect OKX Wallet
+              </button>
+              <button onClick={() => signIn("twitter")} className="btn-secondary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
+                <IconX /> Login with X
+              </button>
+            </div>
+            <p className="text-xs text-nexus-muted mt-3">OKX Wallet: 0 Gas USDC transfers + x402 payments</p>
           </div>
 
           {/* Feature Grid */}
@@ -441,11 +467,18 @@ export default function Dashboard() {
         {/* User */}
         <div className="border-t border-nexus-border p-3 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs shrink-0">@</div>
+            <div className="w-7 h-7 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs shrink-0">
+              {walletMode === "okx" ? "W" : "@"}
+            </div>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-white truncate">@{twitterUsername}</div>
-                <button onClick={() => signOut()} className="text-[10px] text-nexus-muted hover:text-white">Logout</button>
+                <div className="text-xs text-white truncate">{walletMode === "okx" ? displayName : `@${twitterUsername}`}</div>
+                <button onClick={() => {
+                  if (walletMode === "okx") { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }
+                  else { signOut(); }
+                }} className="text-[10px] text-nexus-muted hover:text-white">
+                  {walletMode === "okx" ? "Disconnect" : "Logout"}
+                </button>
               </div>
             )}
           </div>
