@@ -23,17 +23,17 @@ const LANG: Record<string, Record<string, string>> = {
     memeScanner: "Meme Scanner", search: "Search", overview: "Overview", wallet: "Wallet",
     market: "MARKET", tools: "TOOLS", tokenChats: "TOKEN CHATS",
     refresh: "Refresh", disconnect: "Disconnect", logout: "Logout",
-    connectOKX: "Connect OKX Wallet", createLocal: "Create Local Wallet",
-    importKey: "Import Private Key", unlockWallet: "Unlock Wallet",
+    connectOKX: "{t.connectOKX}", createLocal: "{t.createLocal}",
+    importKey: "{t.importKey}", unlockWallet: "{t.unlockWallet}",
     setPassword: "Set Password", unlock: "Unlock", cancel: "Cancel",
     approve: "Approve", approving: "Approving...",
     hotDesc: "Trending tokens by volume & mentions",
     smartDesc: "What smart money wallets are buying",
     whaleDesc: "Large transactions (>$10k)",
     memeDesc: "New meme tokens launching", searchDesc: "Find any token",
-    analyzeWith: "Analyze with AI", refreshData: "Refresh Data",
-    aiChat: "AI Strategy Chat", askAbout: "Ask about",
-    noData: "No data for", tryChain: "Try another chain.",
+    analyzeWith: "{t.analyzeWith}", refreshData: "{t.refreshData}",
+    aiChat: "{t.aiChat}", askAbout: "Ask about",
+    noData: "No data for", tryChain: "{t.tryChain}",
     loading: "Loading", connecting: "Connecting...",
     totalCalls: "Total Calls", revenue: "Revenue",
     walletPnl: "Wallet PnL", totalPnl: "Total PnL",
@@ -609,24 +609,23 @@ export default function Dashboard() {
               OnchainOS + Claude AI · X Layer
             </div>
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.1] tracking-tight mb-6">
-              AI-Powered
+              {t.heroTitle1}
               <br />
-              <span className="text-gradient">On-Chain Strategy.</span>
+              <span className="text-gradient">{t.heroTitle2}</span>
             </h1>
             <p className="text-lg md:text-xl text-nexus-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-              Real-time on-chain data meets AI analysis. Build trading strategies per token,
-              track smart money, and execute — all with natural language.
+              {t.heroDesc}
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button onClick={handleOKXLogin} disabled={connectingOKX} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4 disabled:opacity-60">
                 {connectingOKX ? (
                   <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Connecting...</>
                 ) : (
-                  <><span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span> Connect OKX Wallet</>
+                  <><span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span> {t.connectOKX}</>
                 )}
               </button>
               <button onClick={() => signIn("twitter")} className="btn-secondary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
-                <IconX /> Login with X
+                <IconX /> {t.loginX}
               </button>
             </div>
             <p className="text-xs text-nexus-muted mt-3">OKX Wallet: 0 Gas USDC transfers + x402 payments</p>
@@ -635,9 +634,9 @@ export default function Dashboard() {
           {/* Feature Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-16 max-w-4xl mx-auto">
             {[
-              { icon: <IconFire />, title: "Hot Meme Feed", desc: "Real-time trending tokens, smart money signals, and meme scanner powered by OnchainOS." },
-              { icon: <IconChat />, title: "Per-Token AI Chat", desc: "Each token gets its own AI context. Build analysis logic and buy/sell strategies through conversation." },
-              { icon: <IconShield />, title: "Full On-Chain Intel", desc: "39 OnchainOS commands: holder analysis, whale tracking, bundle detection, PnL, and more." },
+              { icon: <IconFire />, title: t.feat1, desc: t.feat1d },
+              { icon: <IconChat />, title: t.feat2, desc: t.feat2d },
+              { icon: <IconShield />, title: t.feat3, desc: t.feat3d },
             ].map((f, i) => (
               <div key={i} className="card group cursor-default">
                 <div className="w-10 h-10 rounded-xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light mb-4">{f.icon}</div>
@@ -667,15 +666,15 @@ export default function Dashboard() {
       {backupKey && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="card max-w-lg w-full border-nexus-yellow/20">
-            <h2 className="text-lg font-bold text-white mb-3">Save Your Private Key</h2>
+            <h2 className="text-lg font-bold text-white mb-3">{t.saveKey}</h2>
             <p className="text-sm text-gray-400 mb-4">This is the only time it will be shown. Store it safely.</p>
             <div className="bg-nexus-bg p-3 rounded-xl font-mono text-sm text-nexus-accent-light break-all mb-4 select-all border border-nexus-border">{backupKey}</div>
             <label className="flex items-center gap-2 text-sm text-gray-300 mb-4 cursor-pointer select-none">
               <input type="checkbox" checked={backupConfirmed} onChange={e => setBackupConfirmed(e.target.checked)} className="rounded" />
-              I have saved my private key
+              {t.savedKey}
             </label>
             <button onClick={() => { setBackupKey(null); setBackupConfirmed(false); }}
-              disabled={!backupConfirmed} className="btn-primary w-full disabled:opacity-30">Continue</button>
+              disabled={!backupConfirmed} className="btn-primary w-full disabled:opacity-30">{t.continue}</button>
           </div>
         </div>
       )}
@@ -856,7 +855,7 @@ export default function Dashboard() {
               {dataLoading && (
                 <div className="text-center py-12">
                   <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-nexus-muted text-sm">Loading {selectedChain} data...</p>
+                  <p className="text-nexus-muted text-sm">{t.loading} {selectedChain}...</p>
                 </div>
               )}
 
@@ -886,25 +885,25 @@ export default function Dashboard() {
                       {t.details?.name && <div className="text-xs text-nexus-muted mb-2 truncate">{t.details.name}</div>}
 
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                        {t.details?.price && <div><span className="text-nexus-muted">Price </span><span className="text-white">${t.details.price}</span></div>}
-                        {t.details?.market_cap && <div><span className="text-nexus-muted">MCap </span><span className="text-white">${Number(t.details.market_cap).toLocaleString()}</span></div>}
-                        {t.details?.volume_24h && <div><span className="text-nexus-muted">Vol </span><span className="text-white">${Number(t.details.volume_24h).toLocaleString()}</span></div>}
-                        {t.details?.wallet_count && <div><span className="text-nexus-muted">Wallets </span><span className="text-white">{t.details.wallet_count}</span></div>}
-                        {t.details?.amount_usd && <div><span className="text-nexus-muted">Amount </span><span className="text-white">${Number(t.details.amount_usd).toLocaleString()}</span></div>}
-                        {t.details?.holders && <div><span className="text-nexus-muted">Holders </span><span className="text-white">{t.details.holders}</span></div>}
-                        {t.details?.hot_score && <div><span className="text-nexus-muted">Score </span><span className="text-nexus-accent-light">{t.details.hot_score}</span></div>}
-                        {t.details?.sold_ratio_pct && <div><span className="text-nexus-muted">Sold </span><span className="text-white">{t.details.sold_ratio_pct}%</span></div>}
+                        {t.details?.price && <div><span className="text-nexus-muted">{t.price} </span><span className="text-white">${t.details.price}</span></div>}
+                        {t.details?.market_cap && <div><span className="text-nexus-muted">{t.mcap} </span><span className="text-white">${Number(t.details.market_cap).toLocaleString()}</span></div>}
+                        {t.details?.volume_24h && <div><span className="text-nexus-muted">{t.vol} </span><span className="text-white">${Number(t.details.volume_24h).toLocaleString()}</span></div>}
+                        {t.details?.wallet_count && <div><span className="text-nexus-muted">{t.wallets} </span><span className="text-white">{t.details.wallet_count}</span></div>}
+                        {t.details?.amount_usd && <div><span className="text-nexus-muted">{t.amount} </span><span className="text-white">${Number(t.details.amount_usd).toLocaleString()}</span></div>}
+                        {t.details?.holders && <div><span className="text-nexus-muted">{t.holders} </span><span className="text-white">{t.details.holders}</span></div>}
+                        {t.details?.hot_score && <div><span className="text-nexus-muted">{t.score} </span><span className="text-nexus-accent-light">{t.details.hot_score}</span></div>}
+                        {t.details?.sold_ratio_pct && <div><span className="text-nexus-muted">{t.score} </span><span className="text-white">{t.details.sold_ratio_pct}%</span></div>}
                       </div>
 
                       {/* Smart money specific */}
                       {t.type === "smart_money_buy" && t.details?.wallets && (
                         <div className="mt-2 text-[9px] text-nexus-muted truncate">
-                          Wallets: {(t.details.wallets as string[]).join(", ")}
+                          {t.wallets}: {(t.details.wallets as string[]).join(", ")}
                         </div>
                       )}
 
                       <div className="mt-3 flex items-center gap-1 text-[10px] text-nexus-accent-light opacity-0 group-hover:opacity-100 transition-opacity">
-                        <IconChat /> Analyze with AI
+                        <IconChat /> {t.analyzeWith}
                       </div>
                     </div>
                   ))}
@@ -912,7 +911,7 @@ export default function Dashboard() {
                   {/* Empty state */}
                   {(activeView === "hot" ? hotTokens : activeView === "smart" ? smartMoneyData : activeView === "whale" ? whaleData : activeView === "meme" ? memeData : searchResults).length === 0 && !dataLoading && (
                     <div className="col-span-full text-center py-16 text-nexus-muted">
-                      <p className="text-sm">No data for <span className="text-white font-medium">{selectedChain}</span>. Try another chain.</p>
+                      <p className="text-sm">{t.noData} <span className="text-white font-medium">{selectedChain}</span>. {t.tryChain}</p>
                     </div>
                   )}
                 </div>
@@ -932,15 +931,15 @@ export default function Dashboard() {
               </div>
 
               {tokenDataLoading ? (
-                <div className="p-4 text-center text-nexus-muted text-sm">Loading on-chain data...</div>
+                <div className="p-4 text-center text-nexus-muted text-sm">{t.loading}...</div>
               ) : tokenData?.basic ? (
                 <div className="p-4 space-y-4">
                   {/* Technical */}
                   <div>
-                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Technical</h3>
+                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.technical}</h3>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Trend</span>
+                        <span className="text-nexus-muted">{t.trend}</span>
                         <span className={
                           tokenData.basic.technical?.trend === "bullish" ? "text-nexus-green" :
                           tokenData.basic.technical?.trend === "bearish" ? "text-nexus-red" : "text-white"
@@ -951,7 +950,7 @@ export default function Dashboard() {
                         <span className="text-white">{tokenData.basic.technical?.rsi_14 || "—"}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Volume</span>
+                        <span className="text-nexus-muted">{t.volume}</span>
                         <span className="text-white">{tokenData.basic.technical?.volume_trend || "—"}</span>
                       </div>
                     </div>
@@ -959,24 +958,24 @@ export default function Dashboard() {
 
                   {/* Fundamental */}
                   <div>
-                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Fundamental</h3>
+                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.fundamental}</h3>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Honeypot</span>
+                        <span className="text-nexus-muted">{t.honeypot}</span>
                         <span className={tokenData.basic.fundamental?.honeypot ? "text-nexus-red" : "text-nexus-green"}>
                           {tokenData.basic.fundamental?.honeypot ? "YES" : "No"}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Holders</span>
+                        <span className="text-nexus-muted">{t.holders}</span>
                         <span className="text-white">{tokenData.basic.fundamental?.holder_concentration || "—"}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Liquidity</span>
+                        <span className="text-nexus-muted">{t.liquidity}</span>
                         <span className="text-white">${Number(tokenData.basic.fundamental?.liquidity_usd || 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">Tax</span>
+                        <span className="text-nexus-muted">{t.tax}</span>
                         <span className="text-white">B:{tokenData.basic.fundamental?.buy_tax || 0}% S:{tokenData.basic.fundamental?.sell_tax || 0}%</span>
                       </div>
                     </div>
@@ -985,10 +984,10 @@ export default function Dashboard() {
                   {/* Risk */}
                   {tokenData.risk && (
                     <div>
-                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Risk Assessment</h3>
+                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.riskAssessment}</h3>
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">Level</span>
+                          <span className="text-nexus-muted">{t.level}</span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
                             tokenData.risk.risk_level === "low" ? "bg-nexus-green/10 text-nexus-green" :
                             tokenData.risk.risk_level === "medium" ? "bg-nexus-yellow/10 text-nexus-yellow" :
@@ -996,7 +995,7 @@ export default function Dashboard() {
                           }`}>{tokenData.risk.risk_level || "—"}</span>
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">Approved</span>
+                          <span className="text-nexus-muted">{t.approved}</span>
                           <span className={tokenData.risk.approved ? "text-nexus-green" : "text-nexus-red"}>
                             {tokenData.risk.approved ? "Yes" : "No"}
                           </span>
@@ -1008,10 +1007,10 @@ export default function Dashboard() {
                   {/* Meme */}
                   {tokenData.basic.meme && (
                     <div>
-                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Meme Intel</h3>
+                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.memeIntel}</h3>
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">Smart Money</span>
+                          <span className="text-nexus-muted">{t.smartMoney}</span>
                           <span className="text-white">{tokenData.basic.meme.smart_money_sentiment || "—"}</span>
                         </div>
                         <div className="flex justify-between text-xs">
@@ -1038,7 +1037,7 @@ export default function Dashboard() {
                       "border-nexus-border"
                     }`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-nexus-muted">Signal</span>
+                        <span className="text-xs text-nexus-muted">{t.signal}</span>
                         <span className={`text-sm font-bold ${
                           tokenData.basic.recommendation === "BUY" ? "text-nexus-green" :
                           tokenData.basic.recommendation === "SELL" || tokenData.basic.recommendation === "AVOID" ? "text-nexus-red" :
@@ -1050,7 +1049,7 @@ export default function Dashboard() {
                   )}
                 </div>
               ) : (
-                <div className="p-4 text-center text-nexus-muted text-sm">No data available</div>
+                <div className="p-4 text-center text-nexus-muted text-sm">{t.noData}</div>
               )}
             </div>
 
@@ -1059,9 +1058,9 @@ export default function Dashboard() {
               <div className="h-12 px-5 flex items-center justify-between border-b border-nexus-border shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-white font-semibold text-sm">{currentTokenSymbol}</span>
-                  <span className="text-[10px] text-nexus-muted">AI Strategy Chat</span>
+                  <span className="text-[10px] text-nexus-muted">{t.aiChat}</span>
                 </div>
-                <button onClick={() => fetchTokenData(currentTokenSymbol, currentChat.address)} className="text-[10px] text-nexus-muted hover:text-white">Refresh Data</button>
+                <button onClick={() => fetchTokenData(currentTokenSymbol, currentChat.address)} className="text-[10px] text-nexus-muted hover:text-white">{t.refreshData}</button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-5 space-y-3">
@@ -1069,16 +1068,16 @@ export default function Dashboard() {
                   <div className="h-full flex flex-col items-center justify-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light"><IconChat /></div>
                     <div className="text-center">
-                      <p className="text-white font-medium mb-1">Analyze {currentTokenSymbol}</p>
-                      <p className="text-nexus-muted text-xs mb-4">Ask AI about this token — analysis, strategies, buy/sell signals</p>
+                      <p className="text-white font-medium mb-1">{t.analyze} {currentTokenSymbol}</p>
+                      <p className="text-nexus-muted text-xs mb-4">{t.askAI}</p>
                       <div className="flex flex-wrap gap-2 justify-center max-w-md">
                         {[
-                          `分析${currentTokenSymbol}的买入时机`,
-                          `${currentTokenSymbol} safe to buy?`,
-                          `深度分析${currentTokenSymbol}`,
-                          "聪明钱在买吗？",
-                          "设置止损策略",
-                          "和同类币对比",
+                          `${t.quickBuy} ${currentTokenSymbol}`,
+                          `${currentTokenSymbol} ${t.quickSafe}`,
+                          `${t.quickDeep} ${currentTokenSymbol}`,
+                          t.quickSmart,
+                          t.quickStop,
+                          t.quickCompare,
                         ].map((cmd, i) => (
                           <button key={i} onClick={() => setChatInput(cmd)}
                             className="text-xs px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white hover:border-nexus-accent/40 transition-all">
@@ -1119,7 +1118,7 @@ export default function Dashboard() {
                 <div className="flex gap-3">
                   <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && !chatLoading && handleTokenChat()}
-                    className="flex-1 input !rounded-xl" placeholder={`Ask about ${currentTokenSymbol}...`} disabled={chatLoading} />
+                    className="flex-1 input !rounded-xl" placeholder={`{t.askAbout} ${currentTokenSymbol}...`} disabled={chatLoading} />
                   <button onClick={handleTokenChat} disabled={chatLoading || !chatInput.trim()}
                     className="btn-primary !px-4 !py-3 !rounded-xl disabled:opacity-40"><IconSend /></button>
                 </div>
@@ -1131,19 +1130,19 @@ export default function Dashboard() {
         {/* ── WALLET VIEW ── */}
         {activeView === "wallet" && (
           <div className="flex-1 overflow-y-auto p-6">
-            <h1 className="text-xl font-bold text-white mb-6">Wallet</h1>
+            <h1 className="text-xl font-bold text-white mb-6">{t.wallet}</h1>
             <div className="max-w-md">
               <div className="card">
                 {!wallet ? (
                   <div className="space-y-3">
                     <button onClick={handleConnectOKX} className="btn-primary w-full text-sm py-3 flex items-center justify-center gap-2">
                       <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
-                      Connect OKX Wallet
+                      {t.connectOKX}
                     </button>
                     <div className="text-[10px] text-nexus-muted text-center">0 Gas USDC · x402 Payments</div>
                     <div className="border-t border-nexus-border my-2" />
-                    <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">Create Local Wallet</button>
-                    <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">Import Private Key</button>
+                    <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">{t.createLocal}</button>
+                    <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">{t.importKey}</button>
                     {passwordMode === "import" && (
                       <div className="space-y-2 pt-2">
                         <input type="password" value={importKey} onChange={e => setImportKey(e.target.value)} className="input" placeholder="Private key (0x...)" />
@@ -1160,7 +1159,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span className={`flex items-center gap-1.5 text-xs ${unlocked ? "text-nexus-green" : "text-nexus-muted"}`}>
                         <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
-                        {walletMode === "okx" ? "OKX Wallet Connected" : unlocked ? "Unlocked" : "Locked"}
+                        {walletMode === "okx" ? "{t.okxWalletConnected}" : unlocked ? t.unlocked : t.locked}
                       </span>
                       {walletMode === "local" && unlocked && (
                         <button onClick={handleLock} className="btn-ghost text-xs">Lock</button>
@@ -1183,10 +1182,10 @@ export default function Dashboard() {
                     )}
                     {walletMode === "okx" && (
                       <button onClick={() => { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }}
-                        className="btn-ghost text-xs text-nexus-red w-full">Disconnect OKX Wallet</button>
+                        className="btn-ghost text-xs text-nexus-red w-full">{t.disconnect} OKX</button>
                     )}
                     <div className="text-[10px] text-nexus-muted flex items-center gap-1 mt-2">
-                      <IconShield /> {walletMode === "okx" ? "0 Gas x402 · OKX Wallet" : "Key encrypted in browser"}
+                      <IconShield /> {walletMode === "okx" ? "{t.okxGas}" : "{t.keyEncrypted}"}
                     </div>
                   </div>
                 )}
@@ -1195,32 +1194,32 @@ export default function Dashboard() {
               {/* USDC Approval Card */}
               {wallet && (
               <div className="card mt-4">
-                <h2 className="text-sm font-semibold text-white mb-3">AI Analysis Payment (USDC)</h2>
+                <h2 className="text-sm font-semibold text-white mb-3">{t.walletPnl} (USDC)</h2>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-nexus-muted">USDC Balance</span>
+                    <span className="text-nexus-muted">{t.usdcBalance}</span>
                     <span className="text-white">${usdcBalance}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-nexus-muted">Approved</span>
+                    <span className="text-nexus-muted">{t.approved}</span>
                     <span className={parseFloat(usdcAllowance) > 0 ? "text-nexus-green" : "text-nexus-muted"}>
                       ${usdcAllowance}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-nexus-muted">Cost per call</span>
+                    <span className="text-nexus-muted">{t.costPerCall}</span>
                     <span className="text-white">$0.01 ~ $0.08</span>
                   </div>
                 </div>
 
                 {parseFloat(usdcAllowance) > 0 ? (
                   <div className="mt-3 p-2 rounded-lg bg-nexus-green/5 border border-nexus-green/20 text-[10px] text-nexus-green flex items-center gap-1.5">
-                    <IconShield /> Auto-payment enabled · No per-call confirmation needed
+                    <IconShield /> {t.autoPayment}
                   </div>
                 ) : (
                   <div className="mt-3 space-y-2">
                     <p className="text-[10px] text-nexus-muted">
-                      Approve once → all AI analysis calls auto-deduct, no pop-ups.
+                      {t.approveOnce}
                     </p>
                     <button
                       onClick={handleApproveUSDC}
@@ -1230,7 +1229,7 @@ export default function Dashboard() {
                       {approving ? "Approving..." : `Approve $${DEFAULT_APPROVE_AMOUNT} USDC`}
                     </button>
                     {!unlocked && walletMode === "local" && (
-                      <p className="text-[10px] text-nexus-yellow">Unlock wallet first to approve</p>
+                      <p className="text-[10px] text-nexus-yellow">{t.unlockFirst}</p>
                     )}
                   </div>
                 )}
@@ -1243,14 +1242,14 @@ export default function Dashboard() {
         {/* ── OVERVIEW VIEW ── */}
         {activeView === "overview" && (
           <div className="flex-1 overflow-y-auto p-6">
-            <h1 className="text-xl font-bold text-white mb-6">Overview</h1>
+            <h1 className="text-xl font-bold text-white mb-6">{t.overview}</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="card">
                 <div className="stat-label">Total API Calls</div>
                 <div className="text-2xl font-bold text-white mt-1">{stats?.total_calls || 0}</div>
               </div>
               <div className="card">
-                <div className="stat-label">Revenue</div>
+                <div className="stat-label">{t.revenue}</div>
                 <div className="text-2xl font-bold text-nexus-green mt-1">${stats?.total_revenue_usd || "0"}</div>
               </div>
               <div className="card">
@@ -1262,13 +1261,13 @@ export default function Dashboard() {
             {/* PnL Section */}
             {walletPnL && (
               <div className="card">
-                <h2 className="text-sm font-semibold text-white mb-4">Wallet PnL</h2>
+                <h2 className="text-sm font-semibold text-white mb-4">{t.walletPnl}</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: "Total PnL", value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
-                    { label: "Unrealized", value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
-                    { label: "Win Rate", value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
-                    { label: "Trades", value: walletPnL.overview?.total_trades || "0", color: "text-white" },
+                    { label: "{t.totalPnl}", value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
+                    { label: "{t.unrealized}", value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
+                    { label: "{t.winRate}", value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
+                    { label: t.trades, value: walletPnL.overview?.total_trades || "0", color: "text-white" },
                   ].map((s, i) => (
                     <div key={i} className="bg-nexus-bg rounded-xl p-3 border border-nexus-border">
                       <div className="stat-label">{s.label}</div>
