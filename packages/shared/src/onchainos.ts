@@ -3,7 +3,15 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 
-const ONCHAINOS_PATH = path.join(os.homedir(), ".local", "bin");
+// Try multiple possible paths for onchainos binary
+const HOME = os.homedir();
+const ONCHAINOS_PATHS = [
+  path.join(HOME, ".local", "bin"),
+  "/root/.local/bin",
+  "/home/.local/bin",
+  "/usr/local/bin",
+  "/app/.local/bin",
+].join(":");
 
 // OKX API credentials (for HTTP fallback)
 const OKX_API_KEY = process.env.OKX_API_KEY || "";
@@ -62,7 +70,7 @@ export function runOnchainos(command: string): string {
   // Try CLI first
   try {
     const envPath = process.env.PATH || "";
-    const fullPath = envPath.includes(ONCHAINOS_PATH) ? envPath : `${ONCHAINOS_PATH}:${envPath}`;
+    const fullPath = `${ONCHAINOS_PATHS}:${envPath}`;
 
     const result = execSync(`onchainos ${command}`, {
       encoding: "utf-8",
