@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "sh start.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
