@@ -10,6 +10,9 @@ import {
 import {
   connectOKXWallet, disconnectOKXWallet, sendOKXTransaction,
 } from "./okx-wallet";
+import {
+  getUSDCBalance, getUSDCAllowance, buildApproveTransaction, DEFAULT_APPROVE_AMOUNT,
+} from "./usdc";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
@@ -59,6 +62,12 @@ export default function Dashboard() {
   const [importKey, setImportKey] = useState("");
   const privateKeyRef = useRef<string | null>(null);
 
+  // ── USDC Approval State ──
+  const [usdcBalance, setUsdcBalance] = useState<string>("0");
+  const [usdcAllowance, setUsdcAllowance] = useState<string>("0");
+  const [platformWallet, setPlatformWallet] = useState<string>("");
+  const [approving, setApproving] = useState(false);
+
   // ── Navigation State ──
   const [activeView, setActiveView] = useState<"hot" | "wallet" | "overview" | string>("hot"); // "hot", "wallet", "overview", or "token:SYMBOL"
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -106,10 +115,18 @@ export default function Dashboard() {
     fetchHotTokens();
   }, [twitterId]);
 
-  // Fetch wallet PnL
+  // Fetch wallet PnL + USDC info
   useEffect(() => {
     if (!wallet) return;
     fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
+    // Fetch USDC balance & allowance
+    fetch(`${GATEWAY}/payment/info`).then(r => r.json()).then(info => {
+      setPlatformWallet(info.platform_wallet || "");
+      if (info.platform_wallet) {
+        getUSDCBalance(wallet).then(setUsdcBalance);
+        getUSDCAllowance(wallet, info.platform_wallet).then(setUsdcAllowance);
+      }
+    }).catch(() => {});
   }, [wallet]);
 
   // ── Fetch hot tokens ──
@@ -220,6 +237,31 @@ export default function Dashboard() {
       });
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  // ── USDC Approve ──
+  const handleApproveUSDC = async () => {
+    if (!wallet || !platformWallet) return;
+    setApproving(true);
+    try {
+      const tx = buildApproveTransaction(platformWallet, DEFAULT_APPROVE_AMOUNT);
+      if (walletMode === "okx") {
+        await sendOKXTransaction(tx);
+      } else if (privateKeyRef.current) {
+        await signTransaction(privateKeyRef.current, tx);
+      } else {
+        alert("Unlock wallet first");
+        setApproving(false);
+        return;
+      }
+      // Refresh allowance
+      const newAllowance = await getUSDCAllowance(wallet, platformWallet);
+      setUsdcAllowance(newAllowance);
+    } catch (e: any) {
+      alert(`Approve failed: ${e.message}`);
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -813,6 +855,51 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* USDC Approval Card */}
+              {wallet && (
+              <div className="card mt-4">
+                <h2 className="text-sm font-semibold text-white mb-3">AI Analysis Payment (USDC)</h2>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-nexus-muted">USDC Balance</span>
+                    <span className="text-white">${usdcBalance}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-nexus-muted">Approved</span>
+                    <span className={parseFloat(usdcAllowance) > 0 ? "text-nexus-green" : "text-nexus-muted"}>
+                      ${usdcAllowance}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-nexus-muted">Cost per call</span>
+                    <span className="text-white">$0.01 ~ $0.08</span>
+                  </div>
+                </div>
+
+                {parseFloat(usdcAllowance) > 0 ? (
+                  <div className="mt-3 p-2 rounded-lg bg-nexus-green/5 border border-nexus-green/20 text-[10px] text-nexus-green flex items-center gap-1.5">
+                    <IconShield /> Auto-payment enabled · No per-call confirmation needed
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[10px] text-nexus-muted">
+                      Approve once → all AI analysis calls auto-deduct, no pop-ups.
+                    </p>
+                    <button
+                      onClick={handleApproveUSDC}
+                      disabled={approving || !unlocked}
+                      className="btn-primary w-full text-sm py-2.5 disabled:opacity-40"
+                    >
+                      {approving ? "Approving..." : `Approve $${DEFAULT_APPROVE_AMOUNT} USDC`}
+                    </button>
+                    {!unlocked && walletMode === "local" && (
+                      <p className="text-[10px] text-nexus-yellow">Unlock wallet first to approve</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
             </div>
           </div>
         )}
