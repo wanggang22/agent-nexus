@@ -119,15 +119,34 @@ export default function Dashboard() {
   useEffect(() => {
     if (!wallet) return;
     fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
-    // Fetch USDC balance & allowance via Gateway (server-side query, more reliable)
+    // Fetch USDC balance via multiple methods (fallback chain)
     fetch(`${GATEWAY}/payment/info`).then(r => r.json()).then(info => {
       setPlatformWallet(info.platform_wallet || "");
     }).catch(() => {});
+
+    // Method 1: Gateway API
     fetch(`${GATEWAY}/payment/allowance/${wallet}`).then(r => r.json()).then(data => {
       if (data.balance_usdc) setUsdcBalance(data.balance_usdc);
       if (data.allowance_usdc) setUsdcAllowance(data.allowance_usdc);
       if (data.platform_wallet) setPlatformWallet(data.platform_wallet);
-    }).catch(() => {});
+    }).catch(() => {
+      // Method 2: OKX Wallet provider (if extension connected)
+      const okx = (window as any).okxwallet;
+      if (okx) {
+        const usdcContract = "0x74b7f16337b8972027f6196a17a631ac6de26d22";
+        // balanceOf(address) selector = 0x70a08231
+        const data = "0x70a08231000000000000000000000000" + wallet.slice(2).toLowerCase();
+        okx.request({
+          method: "eth_call",
+          params: [{ to: usdcContract, data }, "latest"],
+        }).then((result: string) => {
+          if (result && result !== "0x") {
+            const balance = parseInt(result, 16) / 1e6;
+            setUsdcBalance(balance.toFixed(2));
+          }
+        }).catch(() => {});
+      }
+    });
   }, [wallet]);
 
   // ── Fetch hot tokens ──
