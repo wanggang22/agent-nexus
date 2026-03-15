@@ -1,65 +1,42 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   createLocalWallet, saveWallet, getLocalWallet,
-  unlockLocalWallet, signTransaction, hasLocalWallet, importWallet,
+  unlockLocalWallet, signTransaction, importWallet,
   syncToServer, syncFromServer,
 } from "./wallet";
 import {
-  connectOKXWallet, disconnectOKXWallet, isOKXConnected,
-  getOKXAddress, sendOKXTransaction,
+  connectOKXWallet, disconnectOKXWallet, sendOKXTransaction,
 } from "./okx-wallet";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
-// ── Icons (inline SVG to avoid deps) ──
-const IconWallet = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1 0-6h5.25A2.25 2.25 0 0 1 21 6v6zm0 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18V6a2.25 2.25 0 0 1 2.25-2.25h13.5" />
+// ── Types ──
+interface TokenChat {
+  symbol: string;
+  address: string;
+  history: Array<{ role: string; text: string }>;
+}
+
+// ── Icons ──
+const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d={d} />
   </svg>
 );
-const IconShield = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-  </svg>
-);
-const IconChat = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
-  </svg>
-);
-const IconBolt = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
-  </svg>
-);
-const IconLink = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-  </svg>
-);
-const IconChart = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-  </svg>
-);
+const IconFire = () => <Icon d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />;
+const IconChat = () => <Icon d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />;
+const IconWallet = () => <Icon d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1 0-6h5.25A2.25 2.25 0 0 1 21 6v6zm0 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18V6a2.25 2.25 0 0 1 2.25-2.25h13.5" />;
+const IconChart = () => <Icon d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />;
+const IconPlus = () => <Icon d="M12 4.5v15m7.5-7.5h-15" />;
 const IconSend = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
   </svg>
 );
-const IconLock = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-  </svg>
-);
-const IconUnlock = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-  </svg>
-);
+const IconShield = () => <Icon d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />;
 const IconX = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -71,6 +48,7 @@ export default function Dashboard() {
   const twitterId = (session as any)?.twitterId;
   const twitterUsername = (session as any)?.twitterUsername;
 
+  // ── Wallet State ──
   const [wallet, setWallet] = useState<string | null>(null);
   const [walletMode, setWalletMode] = useState<"local" | "okx" | null>(null);
   const [unlocked, setUnlocked] = useState(false);
@@ -79,204 +57,207 @@ export default function Dashboard() {
   const [backupKey, setBackupKey] = useState<string | null>(null);
   const [backupConfirmed, setBackupConfirmed] = useState(false);
   const [importKey, setImportKey] = useState("");
-  const [bindCode, setBindCode] = useState<string | null>(null);
-
   const privateKeyRef = useRef<string | null>(null);
 
-  const [chatInput, setChatInput] = useState("");
-  const [chatHistory, setChatHistory] = useState<Array<{ role: string; text: string }>>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [stats, setStats] = useState<any>(null);
-  const [pendingTrade, setPendingTrade] = useState<any>(null);
-  const [walletPnL, setWalletPnL] = useState<any>(null);
+  // ── Navigation State ──
+  const [activeView, setActiveView] = useState<"hot" | "wallet" | "overview" | string>("hot"); // "hot", "wallet", "overview", or "token:SYMBOL"
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // ── Hot Tokens ──
   const [hotTokens, setHotTokens] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"chat" | "hot" | "pnl">("chat");
+
+  // ── Token Chats (per-token conversation context) ──
+  const [tokenChats, setTokenChats] = useState<Map<string, TokenChat>>(new Map());
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // ── Token Data (on-chain data for current token) ──
+  const [tokenData, setTokenData] = useState<any>(null);
+  const [tokenDataLoading, setTokenDataLoading] = useState(false);
+
+  // ── Stats ──
+  const [stats, setStats] = useState<any>(null);
+  const [walletPnL, setWalletPnL] = useState<any>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auto scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory, chatLoading]);
+  }, [tokenChats, chatLoading]);
 
-  // Load wallet
+  // ── Get current token from activeView ──
+  const currentTokenSymbol = activeView.startsWith("token:") ? activeView.split(":")[1] : null;
+  const currentChat = currentTokenSymbol ? tokenChats.get(currentTokenSymbol) : null;
+
+  // ── Load wallet + data ──
   useEffect(() => {
     if (!twitterId) return;
     const local = getLocalWallet();
     if (local) {
       setWallet(local.address);
+      setWalletMode("local");
     } else {
       syncFromServer(GATEWAY, "twitter", twitterId).then((result) => {
-        if (result) setWallet(result.address);
+        if (result) { setWallet(result.address); setWalletMode("local"); }
       });
     }
     fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
-    // Fetch hot tokens
-    fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).then(d => {
-      if (d.signals) setHotTokens(d.signals.slice(0, 10));
-    }).catch(() => {});
+    fetchHotTokens();
   }, [twitterId]);
 
-  // Fetch wallet PnL when wallet is available
+  // Fetch wallet PnL
   useEffect(() => {
     if (!wallet) return;
     fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
   }, [wallet]);
 
-  const handleCreateWallet = () => {
-    const { address, privateKey } = createLocalWallet();
-    setWallet(address);
-    setWalletMode("local");
-    setBackupKey(privateKey);
-    privateKeyRef.current = privateKey;
-    setPasswordMode("set");
+  // ── Fetch hot tokens ──
+  const fetchHotTokens = async () => {
+    try {
+      const [hotResp, trendResp, smartResp] = await Promise.all([
+        fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).catch(() => ({ signals: [] })),
+        fetch(`${GATEWAY}/signals/trending`).then(r => r.json()).catch(() => ({ signals: [] })),
+        fetch(`${GATEWAY}/signals/smart-money`).then(r => r.json()).catch(() => ({ signals: [] })),
+      ]);
+      // Merge and deduplicate
+      const all = [...(hotResp.signals || []), ...(trendResp.signals || []), ...(smartResp.signals || [])];
+      const seen = new Set<string>();
+      const unique = all.filter(t => {
+        const key = t.token?.symbol || t.token?.address;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setHotTokens(unique.slice(0, 30));
+    } catch {}
   };
 
+  // ── Fetch token on-chain data ──
+  const fetchTokenData = useCallback(async (symbol: string, address?: string) => {
+    setTokenDataLoading(true);
+    try {
+      const tokenId = address || symbol;
+      const [basic, risk] = await Promise.all([
+        fetch(`${GATEWAY}/basic/full/${tokenId}`).then(r => r.json()).catch(() => null),
+        fetch(`${GATEWAY}/risk/token-safety/${tokenId}`).then(r => r.json()).catch(() => null),
+      ]);
+      setTokenData({ basic, risk, symbol, address: tokenId });
+    } catch {
+      setTokenData(null);
+    } finally {
+      setTokenDataLoading(false);
+    }
+  }, []);
+
+  // Load token data when switching to a token view
+  useEffect(() => {
+    if (!currentTokenSymbol) return;
+    const chat = tokenChats.get(currentTokenSymbol);
+    if (chat?.address) {
+      fetchTokenData(currentTokenSymbol, chat.address);
+    }
+  }, [currentTokenSymbol, fetchTokenData, tokenChats]);
+
+  // ── Open token chat ──
+  const openTokenChat = (symbol: string, address: string) => {
+    if (!tokenChats.has(symbol)) {
+      setTokenChats(prev => {
+        const next = new Map(prev);
+        next.set(symbol, { symbol, address, history: [] });
+        return next;
+      });
+    }
+    setActiveView(`token:${symbol}`);
+  };
+
+  // ── Chat with AI about specific token ──
+  const handleTokenChat = async () => {
+    if (!chatInput.trim() || !currentTokenSymbol || !currentChat) return;
+    const msg = chatInput.trim();
+
+    // Add user message
+    setTokenChats(prev => {
+      const next = new Map(prev);
+      const chat = { ...next.get(currentTokenSymbol)! };
+      chat.history = [...chat.history, { role: "user", text: msg }];
+      next.set(currentTokenSymbol, chat);
+      return next;
+    });
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      // Prepend token context to the message
+      const contextMsg = `[Context: User is analyzing ${currentTokenSymbol} (${currentChat.address}) on X Layer] ${msg}`;
+      const resp = await fetch(`${GATEWAY}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: contextMsg, platform: "twitter", user_id: twitterId }),
+      });
+      const data = await resp.json();
+
+      // Check for trade
+      const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
+      const replyText = tradeResult
+        ? `${tradeResult.data.summary}\n\n${unlocked ? "Wallet unlocked — ready to execute." : "Unlock wallet to execute."}`
+        : (data.reply || data.error || "No response");
+
+      setTokenChats(prev => {
+        const next = new Map(prev);
+        const chat = { ...next.get(currentTokenSymbol)! };
+        chat.history = [...chat.history, { role: "agent", text: replyText }];
+        next.set(currentTokenSymbol, chat);
+        return next;
+      });
+    } catch (e: any) {
+      setTokenChats(prev => {
+        const next = new Map(prev);
+        const chat = { ...next.get(currentTokenSymbol)! };
+        chat.history = [...chat.history, { role: "agent", text: `Error: ${e.message}` }];
+        next.set(currentTokenSymbol, chat);
+        return next;
+      });
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // ── Wallet handlers ──
+  const handleConnectOKX = async () => {
+    const result = await connectOKXWallet();
+    if (result) { setWallet(result.address); setWalletMode("okx"); setUnlocked(true); }
+  };
+  const handleCreateWallet = () => {
+    const { address, privateKey } = createLocalWallet();
+    setWallet(address); setWalletMode("local"); setBackupKey(privateKey);
+    privateKeyRef.current = privateKey; setPasswordMode("set");
+  };
   const handleSetPassword = async () => {
-    if (password.length < 6) { alert("Password must be at least 6 characters"); return; }
+    if (password.length < 6) { alert("Min 6 chars"); return; }
     if (!privateKeyRef.current || !wallet) return;
     const saved = await saveWallet(wallet, privateKeyRef.current, password);
     if (saved) {
       await syncToServer(GATEWAY, "twitter", twitterId);
-      setPasswordMode(null);
-      setPassword("");
-      setUnlocked(true);
-    } else {
-      alert("Failed to save wallet");
+      setPasswordMode(null); setPassword(""); setUnlocked(true);
     }
   };
-
   const handleUnlock = async () => {
-    if (password.length < 6) { alert("Password must be at least 6 characters"); return; }
+    if (password.length < 6) { alert("Min 6 chars"); return; }
     const result = await unlockLocalWallet(password);
     if (result) {
       privateKeyRef.current = result.privateKey;
-      setUnlocked(true);
-      setPasswordMode(null);
-      setPassword("");
-    } else {
-      alert("Wrong password");
-    }
+      setUnlocked(true); setPasswordMode(null); setPassword("");
+    } else { alert("Wrong password"); }
   };
-
-  const handleLock = () => {
-    privateKeyRef.current = null;
-    setUnlocked(false);
-  };
-
+  const handleLock = () => { privateKeyRef.current = null; setUnlocked(false); };
   const handleImport = async () => {
-    if (password.length < 6) { alert("Password must be at least 6 characters"); return; }
-    if (!importKey.startsWith("0x")) { alert("Private key must start with 0x"); return; }
+    if (password.length < 6 || !importKey.startsWith("0x")) { alert("Invalid input"); return; }
     const result = await importWallet(importKey, password);
     if (result) {
       await syncToServer(GATEWAY, "twitter", twitterId);
-      setWallet(result.address);
-      privateKeyRef.current = importKey;
-      setUnlocked(true);
-      setPasswordMode(null);
-      setPassword("");
-      setImportKey("");
-    } else {
-      alert("Invalid private key");
-    }
-  };
-
-  // ── OKX Wallet ──
-  const handleConnectOKX = async () => {
-    const result = await connectOKXWallet();
-    if (result) {
-      setWallet(result.address);
-      setWalletMode("okx");
-      setUnlocked(true); // OKX Wallet is always "unlocked" — signs via wallet app
-    }
-  };
-
-  const handleDisconnectOKX = () => {
-    disconnectOKXWallet();
-    setWallet(null);
-    setWalletMode(null);
-    setUnlocked(false);
-  };
-
-  const handleBindTelegram = async () => {
-    const resp = await fetch(`${GATEWAY}/bind/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform: "twitter", user_id: twitterId }),
-    });
-    const data = await resp.json();
-    setBindCode(data.code || null);
-  };
-
-  const executeTradeLocally = async (tradeParams: any) => {
-    if (walletMode !== "okx" && !privateKeyRef.current) {
-      setChatHistory(h => [...h, { role: "agent", text: "Wallet locked. Please unlock first." }]);
-      return;
-    }
-    if (!wallet) {
-      setChatHistory(h => [...h, { role: "agent", text: "No wallet connected." }]);
-      return;
-    }
-    setChatLoading(true);
-    try {
-      const buildResp = await fetch(`${GATEWAY}/trade/build`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...tradeParams, wallet_address: wallet }),
-      });
-      const buildResult = await buildResp.json();
-      if (!buildResult.success || !buildResult.tx) {
-        setChatHistory(h => [...h, { role: "agent", text: `Trade failed: ${buildResult.error}` }]);
-        return;
-      }
-      // Sign via OKX Wallet or local key
-      const txHash = walletMode === "okx"
-        ? await sendOKXTransaction(buildResult.tx)
-        : await signTransaction(privateKeyRef.current!, buildResult.tx);
-      setChatHistory(h => [...h, {
-        role: "agent",
-        text: `Trade executed!\n\nTX: ${txHash}\nWallet: ${wallet}\n\nhttps://www.okx.com/web3/explorer/xlayer/tx/${txHash}`,
-      }]);
-    } catch (e: any) {
-      setChatHistory(h => [...h, { role: "agent", text: `Trade error: ${e.message}` }]);
-    } finally {
-      setChatLoading(false);
-      setPendingTrade(null);
-    }
-  };
-
-  const handleChat = async () => {
-    if (!chatInput.trim()) return;
-    const msg = chatInput.trim();
-    setChatHistory(h => [...h, { role: "user", text: msg }]);
-    setChatInput("");
-    setChatLoading(true);
-    try {
-      const resp = await fetch(`${GATEWAY}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, platform: "twitter", user_id: twitterId }),
-      });
-      const data = await resp.json();
-      const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
-      if (tradeResult) {
-        if (unlocked && privateKeyRef.current) {
-          setChatHistory(h => [...h, { role: "agent", text: `Executing: ${tradeResult.data.summary}...` }]);
-          await executeTradeLocally(tradeResult.data.trade_params);
-        } else {
-          setPendingTrade(tradeResult.data.trade_params);
-          setChatHistory(h => [...h, {
-            role: "agent",
-            text: `${tradeResult.data.summary}\n\nWallet is locked. Please unlock to execute this trade.`,
-          }]);
-        }
-        return;
-      }
-      setChatHistory(h => [...h, { role: "agent", text: data.reply || data.error || "No response" }]);
-    } catch (e: any) {
-      setChatHistory(h => [...h, { role: "agent", text: `Error: ${e.message}` }]);
-    } finally {
-      setChatLoading(false);
+      setWallet(result.address); setWalletMode("local"); privateKeyRef.current = importKey;
+      setUnlocked(true); setPasswordMode(null); setPassword(""); setImportKey("");
     }
   };
 
@@ -284,25 +265,20 @@ export default function Dashboard() {
   if (status === "loading") {
     return (
       <main className="min-h-screen flex items-center justify-center bg-nexus-bg">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin" />
-          <span className="text-nexus-muted text-sm">Loading...</span>
-        </div>
+        <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin" />
       </main>
     );
   }
 
   // ══════════════════════════════════════════════════════════════
-  // ██  LOGIN / LANDING PAGE
+  // ██  LOGIN PAGE
   // ══════════════════════════════════════════════════════════════
   if (!session) {
     return (
       <main className="min-h-screen bg-nexus-bg relative overflow-hidden">
-        {/* Background glow */}
         <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-nexus-accent/5 rounded-full blur-[120px] pointer-events-none" />
 
-        {/* Nav */}
         <nav className="relative z-10 flex items-center justify-between max-w-6xl mx-auto px-6 py-6">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-nexus-accent flex items-center justify-center">
@@ -310,482 +286,533 @@ export default function Dashboard() {
             </div>
             <span className="text-white font-semibold text-lg tracking-tight">AgentNexus</span>
           </div>
-          <div className="flex items-center gap-6">
-            <a href="https://github.com/user/agent-nexus" target="_blank" rel="noopener" className="text-nexus-muted hover:text-white text-sm transition-colors">Docs</a>
-            <button onClick={() => signIn("twitter")} className="text-sm bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-lg border border-white/10 transition-all">
-              Sign In
-            </button>
-          </div>
+          <button onClick={() => signIn("twitter")} className="text-sm bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-lg border border-white/10 transition-all">
+            Sign In
+          </button>
         </nav>
 
-        {/* Hero */}
         <div className="relative z-10 max-w-6xl mx-auto px-6 pt-16 pb-20">
           <div className="text-center max-w-3xl mx-auto animate-fade-in">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-nexus-accent/10 border border-nexus-accent/20 text-nexus-accent-light text-xs font-medium mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-nexus-green animate-pulse" />
-              Built on X Layer · OKX Hackathon
+              OnchainOS + Claude AI · X Layer
             </div>
-
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.1] tracking-tight mb-6">
-              Trade with AI.
+              AI-Powered
               <br />
-              <span className="text-gradient">Your keys, your rules.</span>
+              <span className="text-gradient">On-Chain Strategy.</span>
             </h1>
-
             <p className="text-lg md:text-xl text-nexus-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-              Natural language trading on X Layer. Your private key never leaves your browser.
-              Chat, analyze, and swap — powered by AI agents.
+              Real-time on-chain data meets AI analysis. Build trading strategies per token,
+              track smart money, and execute — all with natural language.
             </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button onClick={() => signIn("twitter")} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
-                <IconX />
-                Login with X
-              </button>
-              <a href="https://github.com/user/agent-nexus" target="_blank" rel="noopener" className="btn-secondary inline-flex items-center justify-center gap-2 text-base px-8 py-4">
-                Read Docs
-              </a>
-            </div>
+            <button onClick={() => signIn("twitter")} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
+              <IconX /> Get Started
+            </button>
           </div>
 
-          {/* Terminal Preview */}
-          <div className="max-w-2xl mx-auto mt-16 animate-slide-up">
-            <div className="rounded-2xl overflow-hidden border border-nexus-border bg-nexus-card shadow-2xl shadow-nexus-accent/5">
-              <div className="flex items-center gap-2 px-4 py-3 bg-nexus-bg/80 border-b border-nexus-border">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-nexus-red/70" />
-                  <div className="w-3 h-3 rounded-full bg-nexus-yellow/70" />
-                  <div className="w-3 h-3 rounded-full bg-nexus-green/70" />
-                </div>
-                <span className="text-xs text-nexus-muted ml-2 font-mono">AgentNexus Terminal</span>
-              </div>
-              <div className="p-5 font-mono text-sm space-y-3">
-                <div className="flex gap-2">
-                  <span className="text-nexus-green">you</span>
-                  <span className="text-gray-300">帮我换 1 OKB 到 USDT</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-nexus-accent-light">agent</span>
-                  <span className="text-gray-400">Analyzing OKB/USDT pair on X Layer DEX...</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-nexus-accent-light">agent</span>
-                  <span className="text-gray-400">Best route: OKB → USDT via OKXSwap</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-nexus-accent-light">agent</span>
-                  <span className="text-gray-400">Price: 1 OKB = $52.38 · Slippage: 0.3%</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-nexus-green">✓</span>
-                  <span className="text-nexus-green">Trade executed · TX: 0xa3f1...8c2d</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="relative z-10 max-w-6xl mx-auto px-6 pb-20">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Feature Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-16 max-w-4xl mx-auto">
             {[
-              {
-                icon: <IconShield />,
-                title: "Client-Side Keys",
-                desc: "Private keys are encrypted with AES-256-GCM in your browser. Our servers never see them.",
-              },
-              {
-                icon: <IconBolt />,
-                title: "Natural Language Trading",
-                desc: "Say \"swap 1 OKB to USDT\" and the AI agent handles routing, pricing, and execution.",
-              },
-              {
-                icon: <IconLink />,
-                title: "Multi-Platform",
-                desc: "One wallet across Dashboard, Telegram bot, and Twitter. Bind once, trade anywhere.",
-              },
+              { icon: <IconFire />, title: "Hot Meme Feed", desc: "Real-time trending tokens, smart money signals, and meme scanner powered by OnchainOS." },
+              { icon: <IconChat />, title: "Per-Token AI Chat", desc: "Each token gets its own AI context. Build analysis logic and buy/sell strategies through conversation." },
+              { icon: <IconShield />, title: "Full On-Chain Intel", desc: "39 OnchainOS commands: holder analysis, whale tracking, bundle detection, PnL, and more." },
             ].map((f, i) => (
-              <div key={i} className="card group cursor-default" style={{ animationDelay: `${i * 100}ms` }}>
-                <div className="w-10 h-10 rounded-xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light mb-4 group-hover:bg-nexus-accent/20 transition-colors">
-                  {f.icon}
-                </div>
-                <h3 className="text-white font-semibold text-base mb-2">{f.title}</h3>
+              <div key={i} className="card group cursor-default">
+                <div className="w-10 h-10 rounded-xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light mb-4">{f.icon}</div>
+                <h3 className="text-white font-semibold mb-2">{f.title}</h3>
                 <p className="text-nexus-muted text-sm leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* How it works */}
-        <div className="relative z-10 max-w-6xl mx-auto px-6 pb-20">
-          <h2 className="text-2xl font-bold text-white text-center mb-10">How It Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {[
-              { step: "01", title: "Login", desc: "Sign in with your X account. One click, no signup forms." },
-              { step: "02", title: "Connect Wallet", desc: "Connect OKX Wallet (0 Gas, x402) or create a local wallet in your browser." },
-              { step: "03", title: "Chat & Trade", desc: "Tell the AI what you want. It analyzes, routes, and executes — you just confirm." },
-            ].map((s, i) => (
-              <div key={i} className="flex gap-4 items-start">
-                <div className="text-3xl font-extrabold text-nexus-accent/30 shrink-0">{s.step}</div>
-                <div>
-                  <h3 className="text-white font-semibold mb-1">{s.title}</h3>
-                  <p className="text-nexus-muted text-sm leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <footer className="relative z-10 border-t border-nexus-border py-8">
-          <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-nexus-muted text-sm">
-              <div className="w-6 h-6 rounded bg-nexus-accent/80 flex items-center justify-center">
-                <span className="text-white font-bold text-[10px]">AN</span>
-              </div>
-              AgentNexus · X Layer AI Agent Hackathon
-            </div>
-            <div className="flex items-center gap-4 text-xs text-nexus-muted">
-              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-nexus-green" /> X Layer (196)</span>
-              <span>OKB Native</span>
-            </div>
-          </div>
+        <footer className="relative z-10 border-t border-nexus-border py-6 text-center text-xs text-nexus-muted">
+          AgentNexus · X Layer AI Agent Hackathon · OnchainOS + Claude AI
         </footer>
       </main>
     );
   }
 
   // ══════════════════════════════════════════════════════════════
-  // ██  PRODUCT DASHBOARD (Logged In)
+  // ██  MAIN APP (Sidebar + Content)
   // ══════════════════════════════════════════════════════════════
+
+  const tokenChatList = Array.from(tokenChats.values());
+
   return (
-    <main className="min-h-screen bg-nexus-bg">
+    <div className="h-screen flex bg-nexus-bg overflow-hidden">
       {/* ── Private Key Backup Modal ── */}
       {backupKey && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="card max-w-lg w-full border-nexus-yellow/20 animate-slide-up">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-nexus-yellow/10 flex items-center justify-center text-nexus-yellow">
-                <IconShield />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">Save Your Private Key</h2>
-                <p className="text-xs text-nexus-muted">This is the only time it will be shown</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-400 mb-4">
-              Your key is stored <strong className="text-white">encrypted in this browser only</strong> — our servers never see it.
-              Save it to import into OKX Wallet, MetaMask, or another device.
-            </p>
-
-            <div className="bg-nexus-bg p-4 rounded-xl font-mono text-sm text-nexus-accent-light break-all mb-4 select-all border border-nexus-border">
-              {backupKey}
-            </div>
-
-            <label className="flex items-center gap-2.5 text-sm text-gray-300 mb-5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={backupConfirmed}
-                onChange={e => setBackupConfirmed(e.target.checked)}
-                className="w-4 h-4 rounded border-nexus-border bg-nexus-bg text-nexus-accent focus:ring-nexus-accent/50"
-              />
-              I have saved my private key in a safe place
+          <div className="card max-w-lg w-full border-nexus-yellow/20">
+            <h2 className="text-lg font-bold text-white mb-3">Save Your Private Key</h2>
+            <p className="text-sm text-gray-400 mb-4">This is the only time it will be shown. Store it safely.</p>
+            <div className="bg-nexus-bg p-3 rounded-xl font-mono text-sm text-nexus-accent-light break-all mb-4 select-all border border-nexus-border">{backupKey}</div>
+            <label className="flex items-center gap-2 text-sm text-gray-300 mb-4 cursor-pointer select-none">
+              <input type="checkbox" checked={backupConfirmed} onChange={e => setBackupConfirmed(e.target.checked)} className="rounded" />
+              I have saved my private key
             </label>
-
-            <button
-              onClick={() => { setBackupKey(null); setBackupConfirmed(false); }}
-              disabled={!backupConfirmed}
-              className="btn-primary w-full disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none"
-            >
-              Continue
-            </button>
+            <button onClick={() => { setBackupKey(null); setBackupConfirmed(false); }}
+              disabled={!backupConfirmed} className="btn-primary w-full disabled:opacity-30">Continue</button>
           </div>
         </div>
       )}
 
-      {/* ── Header ── */}
-      <header className="border-b border-nexus-border bg-nexus-card/50 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-nexus-accent flex items-center justify-center">
-              <span className="text-white font-bold text-xs">AN</span>
-            </div>
-            <span className="text-white font-semibold tracking-tight">AgentNexus</span>
-            <span className="text-nexus-muted text-xs hidden sm:block ml-1">X Layer</span>
+      {/* ══════════ SIDEBAR ══════════ */}
+      <aside className={`${sidebarOpen ? "w-64" : "w-16"} shrink-0 bg-nexus-card border-r border-nexus-border flex flex-col transition-all duration-300 overflow-hidden`}>
+        {/* Logo */}
+        <div className="h-14 flex items-center px-4 border-b border-nexus-border gap-2.5 shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-nexus-accent flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-xs">AN</span>
           </div>
-          <div className="flex items-center gap-4">
-            {wallet && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs">
-                {unlocked ? (
-                  <span className="flex items-center gap-1 text-nexus-green"><span className="w-1.5 h-1.5 rounded-full bg-nexus-green" /> Unlocked</span>
-                ) : (
-                  <span className="flex items-center gap-1 text-nexus-muted"><IconLock /> Locked</span>
-                )}
-              </div>
-            )}
-            <div className="flex items-center gap-2 text-sm text-gray-300">
-              <div className="w-6 h-6 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs">
-                @
-              </div>
-              <span className="hidden sm:block">{twitterUsername}</span>
-            </div>
-            <button onClick={() => signOut()} className="btn-ghost text-xs">Logout</button>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
-        {/* ── Top Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Wallet Card */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light">
-                <IconWallet />
-              </div>
-              <h2 className="text-white font-semibold">Wallet</h2>
-            </div>
-
-            {!wallet ? (
-              <div className="space-y-2.5">
-                <button onClick={handleConnectOKX} className="btn-primary w-full text-sm py-2.5 flex items-center justify-center gap-2">
-                  <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
-                  Connect OKX Wallet
-                </button>
-                <div className="text-[10px] text-nexus-muted text-center">0 Gas USDC · x402 Payments</div>
-                <div className="divider !my-2" />
-                <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">
-                  Create Local Wallet
-                </button>
-                <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">
-                  Import Private Key
-                </button>
-
-                {passwordMode === "import" && (
-                  <div className="pt-2 space-y-2">
-                    <input type="password" value={importKey} onChange={e => setImportKey(e.target.value)}
-                      className="input" placeholder="Private key (0x...)" />
-                    <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                      className="input" placeholder="Set trading password" onKeyDown={e => e.key === "Enter" && handleImport()} />
-                    <button onClick={handleImport} className="btn-primary w-full text-sm py-2.5">Import & Encrypt</button>
-                    <button onClick={() => { setPasswordMode(null); setImportKey(""); setPassword(""); }}
-                      className="btn-ghost w-full text-xs py-1">Cancel</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-[10px] text-nexus-muted uppercase tracking-wider mb-1">X Layer Address</div>
-                  <div className="text-xs font-mono text-nexus-accent-light bg-nexus-bg p-2.5 rounded-lg break-all border border-nexus-border">
-                    {wallet}
-                  </div>
-                </div>
-
-                {passwordMode === "set" ? (
-                  <div className="space-y-2">
-                    <div className="text-xs text-nexus-yellow">Set trading password (min 6 chars):</div>
-                    <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                      className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleSetPassword()} />
-                    <button onClick={handleSetPassword} className="btn-primary w-full text-sm py-2.5">Set Password</button>
-                  </div>
-                ) : passwordMode === "unlock" ? (
-                  <div className="space-y-2">
-                    <div className="text-xs text-nexus-muted">Enter password to unlock:</div>
-                    <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                      className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleUnlock()} />
-                    <div className="flex gap-2">
-                      <button onClick={handleUnlock} className="btn-primary flex-1 text-sm py-2.5">Unlock</button>
-                      <button onClick={() => { setPasswordMode(null); setPassword(""); }} className="btn-secondary text-sm py-2.5 px-4">Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    {unlocked ? (
-                      <>
-                        <span className="flex items-center gap-1.5 text-xs text-nexus-green">
-                          <IconUnlock />
-                          {walletMode === "okx" ? "OKX Wallet" : "Unlocked (local)"}
-                        </span>
-                        {walletMode !== "okx" && (
-                          <button onClick={handleLock} className="btn-ghost text-xs flex items-center gap-1">
-                            <IconLock /> Lock
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <button onClick={() => setPasswordMode("unlock")} className="btn-secondary w-full text-sm py-2.5 flex items-center justify-center gap-2">
-                        <IconUnlock />
-                        Unlock Wallet
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <div className="text-[10px] text-nexus-muted flex items-center gap-1">
-                  <IconShield /> {walletMode === "okx" ? "Connected via OKX Wallet · 0 Gas x402" : "Key encrypted in browser · server never sees it"}
-                </div>
-                {walletMode === "okx" && (
-                  <button onClick={handleDisconnectOKX} className="btn-ghost text-xs text-nexus-red mt-1">Disconnect OKX Wallet</button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Telegram Card */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-                <IconLink />
-              </div>
-              <h2 className="text-white font-semibold">Telegram</h2>
-            </div>
-            <p className="text-sm text-nexus-muted mb-4">Link your Telegram to trade via @AgentNexusBot.</p>
-
-            {bindCode ? (
-              <div className="space-y-3">
-                <div className="text-xs text-nexus-muted">Send this to the bot:</div>
-                <div className="font-mono text-nexus-accent-light bg-nexus-bg p-3 rounded-xl text-center text-lg border border-nexus-accent/20">
-                  /verify {bindCode}
-                </div>
-                <div className="text-[10px] text-nexus-muted text-center">Expires in 5 minutes</div>
-              </div>
-            ) : (
-              <button onClick={handleBindTelegram} className="btn-secondary w-full text-sm py-2.5">
-                Generate Bind Code
-              </button>
-            )}
-          </div>
-
-          {/* Stats Card */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-nexus-green/10 flex items-center justify-center text-nexus-green">
-                <IconChart />
-              </div>
-              <h2 className="text-white font-semibold">Platform</h2>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="stat-label">Total Calls</span>
-                <span className="text-white font-semibold">{stats?.total_calls || 0}</span>
-              </div>
-              <div className="divider !my-2" />
-              <div className="flex justify-between items-center">
-                <span className="stat-label">Revenue</span>
-                <span className="text-nexus-green font-semibold">${stats?.total_revenue_usd || "0"}</span>
-              </div>
-              <div className="divider !my-2" />
-              <div className="flex justify-between items-center">
-                <span className="stat-label">Network</span>
-                <span className="price-tag">X Layer (196)</span>
-              </div>
-              <div className="divider !my-2" />
-              <div className="flex justify-between items-center">
-                <span className="stat-label">Security</span>
-                <span className="flex items-center gap-1 text-nexus-green text-xs"><IconShield /> Client-side</span>
-              </div>
-            </div>
-          </div>
+          {sidebarOpen && <span className="text-white font-semibold tracking-tight text-sm">AgentNexus</span>}
         </div>
 
-        {/* ── Tab Navigation ── */}
-        <div className="flex gap-1 bg-nexus-card rounded-xl p-1 border border-nexus-border">
-          {([
-            { id: "chat" as const, label: "Chat", icon: <IconChat /> },
-            { id: "hot" as const, label: "Hot Tokens", icon: <IconBolt /> },
-            { id: "pnl" as const, label: "PnL", icon: <IconChart /> },
-          ]).map(tab => (
+        {/* Nav Items */}
+        <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-2">
+          {/* Hot Meme */}
+          <button
+            onClick={() => { setActiveView("hot"); fetchHotTokens(); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+              activeView === "hot" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <IconFire />
+            {sidebarOpen && <span>Hot Meme</span>}
+          </button>
+
+          {/* Overview */}
+          <button
+            onClick={() => setActiveView("overview")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+              activeView === "overview" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <IconChart />
+            {sidebarOpen && <span>Overview</span>}
+          </button>
+
+          {/* Wallet */}
+          <button
+            onClick={() => setActiveView("wallet")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+              activeView === "wallet" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <IconWallet />
+            {sidebarOpen && (
+              <div className="flex-1 flex items-center justify-between">
+                <span>Wallet</span>
+                {wallet && (
+                  <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
+                )}
+              </div>
+            )}
+          </button>
+
+          {/* Divider + Token Chats */}
+          {sidebarOpen && tokenChatList.length > 0 && (
+            <>
+              <div className="border-t border-nexus-border my-3" />
+              <div className="px-3 text-[10px] text-nexus-muted uppercase tracking-wider mb-1">Token Chats</div>
+            </>
+          )}
+
+          {tokenChatList.map(chat => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? "bg-nexus-accent text-white shadow-md"
-                  : "text-nexus-muted hover:text-white"
+              key={chat.symbol}
+              onClick={() => setActiveView(`token:${chat.symbol}`)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
+                activeView === `token:${chat.symbol}` ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
               }`}
             >
-              {tab.icon} {tab.label}
+              <IconChat />
+              {sidebarOpen && (
+                <div className="flex-1 flex items-center justify-between min-w-0">
+                  <span className="truncate">{chat.symbol}</span>
+                  <span className="text-[10px] text-nexus-muted">{chat.history.length}</span>
+                </div>
+              )}
             </button>
           ))}
-        </div>
+        </nav>
 
-        {/* ── Hot Tokens Panel ── */}
-        {activeTab === "hot" && (
-          <div className="card !p-0 overflow-hidden animate-fade-in">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-nexus-border">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400">
-                  <IconBolt />
-                </div>
-                <div>
-                  <h2 className="text-white font-semibold text-sm">Hot Tokens</h2>
-                  <p className="text-[10px] text-nexus-muted">Ranked by trending score & X mentions</p>
-                </div>
+        {/* User */}
+        <div className="border-t border-nexus-border p-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs shrink-0">@</div>
+            {sidebarOpen && (
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-white truncate">@{twitterUsername}</div>
+                <button onClick={() => signOut()} className="text-[10px] text-nexus-muted hover:text-white">Logout</button>
               </div>
-              <button
-                onClick={() => fetch(`${GATEWAY}/signals/hot-tokens`).then(r => r.json()).then(d => { if (d.signals) setHotTokens(d.signals.slice(0, 10)); })}
-                className="btn-ghost text-xs"
-              >Refresh</button>
-            </div>
-            <div className="divide-y divide-nexus-border">
-              {hotTokens.length === 0 ? (
-                <div className="p-8 text-center text-nexus-muted text-sm">No hot tokens data</div>
-              ) : (
-                hotTokens.map((t: any, i: number) => (
-                  <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-nexus-card-hover transition-colors">
-                    <span className="text-nexus-muted text-xs w-5 text-right">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* ══════════ MAIN CONTENT ══════════ */}
+      <main className="flex-1 overflow-hidden flex flex-col">
+
+        {/* ── HOT MEME VIEW ── */}
+        {activeView === "hot" && (
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h1 className="text-xl font-bold text-white">Hot Tokens</h1>
+                  <p className="text-xs text-nexus-muted mt-0.5">Trending · Smart Money · Meme Scanner</p>
+                </div>
+                <button onClick={fetchHotTokens} className="btn-secondary text-xs py-2 px-4">Refresh</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {hotTokens.map((t, i) => (
+                  <div
+                    key={i}
+                    onClick={() => openTokenChat(t.token?.symbol || "UNKNOWN", t.token?.address || "")}
+                    className="card cursor-pointer hover:border-nexus-accent/40 group"
+                  >
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-white font-medium text-sm truncate">{t.token?.symbol || "?"}</span>
-                        {t.details?.name && <span className="text-nexus-muted text-xs truncate">{t.details.name}</span>}
+                        <span className="text-xs text-nexus-muted w-5">#{i + 1}</span>
+                        <span className="text-white font-semibold">{t.token?.symbol || "?"}</span>
                       </div>
-                      <div className="flex gap-3 mt-0.5">
-                        {t.details?.market_cap && <span className="text-[10px] text-nexus-muted">MCap: ${Number(t.details.market_cap).toLocaleString()}</span>}
-                        {t.details?.volume_24h && <span className="text-[10px] text-nexus-muted">Vol: ${Number(t.details.volume_24h).toLocaleString()}</span>}
-                      </div>
-                    </div>
-                    <div className="text-right">
                       {t.details?.change_24h && (
-                        <span className={`text-xs font-medium ${parseFloat(t.details.change_24h) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-lg ${
+                          parseFloat(t.details.change_24h) >= 0
+                            ? "text-nexus-green bg-nexus-green/10"
+                            : "text-nexus-red bg-nexus-red/10"
+                        }`}>
                           {parseFloat(t.details.change_24h) >= 0 ? "+" : ""}{parseFloat(t.details.change_24h).toFixed(1)}%
                         </span>
                       )}
-                      {t.details?.hot_score && <div className="text-[10px] text-nexus-muted">Score: {t.details.hot_score}</div>}
+                    </div>
+                    {t.details?.name && <div className="text-xs text-nexus-muted mb-2 truncate">{t.details.name}</div>}
+                    <div className="flex gap-4 text-[10px] text-nexus-muted">
+                      {t.details?.market_cap && <span>MCap ${Number(t.details.market_cap).toLocaleString()}</span>}
+                      {t.details?.volume_24h && <span>Vol ${Number(t.details.volume_24h).toLocaleString()}</span>}
+                    </div>
+                    <div className="mt-3 flex items-center gap-1 text-[10px] text-nexus-accent-light opacity-0 group-hover:opacity-100 transition-opacity">
+                      <IconChat /> Open analysis chat
                     </div>
                   </div>
-                ))
-              )}
+                ))}
+                {hotTokens.length === 0 && (
+                  <div className="col-span-full text-center py-20 text-nexus-muted">
+                    <IconFire />
+                    <p className="mt-2">Loading hot tokens...</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {/* ── PnL Panel ── */}
-        {activeTab === "pnl" && (
-          <div className="card !p-0 overflow-hidden animate-fade-in">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-nexus-border">
-              <div className="w-8 h-8 rounded-lg bg-nexus-green/10 flex items-center justify-center text-nexus-green">
-                <IconChart />
+        {/* ── TOKEN CHAT VIEW ── */}
+        {currentTokenSymbol && currentChat && (
+          <div className="flex-1 flex overflow-hidden">
+            {/* Token Data Panel */}
+            <div className="w-80 border-r border-nexus-border overflow-y-auto shrink-0 hidden lg:block">
+              <div className="p-4 border-b border-nexus-border">
+                <h2 className="text-lg font-bold text-white">{currentTokenSymbol}</h2>
+                <p className="text-[10px] text-nexus-muted font-mono truncate">{currentChat.address}</p>
               </div>
-              <div>
-                <h2 className="text-white font-semibold text-sm">Wallet PnL</h2>
-                <p className="text-[10px] text-nexus-muted">{wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : "No wallet"}</p>
+
+              {tokenDataLoading ? (
+                <div className="p-4 text-center text-nexus-muted text-sm">Loading on-chain data...</div>
+              ) : tokenData?.basic ? (
+                <div className="p-4 space-y-4">
+                  {/* Technical */}
+                  <div>
+                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Technical</h3>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Trend</span>
+                        <span className={
+                          tokenData.basic.technical?.trend === "bullish" ? "text-nexus-green" :
+                          tokenData.basic.technical?.trend === "bearish" ? "text-nexus-red" : "text-white"
+                        }>{tokenData.basic.technical?.trend || "—"}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">RSI</span>
+                        <span className="text-white">{tokenData.basic.technical?.rsi_14 || "—"}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Volume</span>
+                        <span className="text-white">{tokenData.basic.technical?.volume_trend || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fundamental */}
+                  <div>
+                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Fundamental</h3>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Honeypot</span>
+                        <span className={tokenData.basic.fundamental?.honeypot ? "text-nexus-red" : "text-nexus-green"}>
+                          {tokenData.basic.fundamental?.honeypot ? "YES" : "No"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Holders</span>
+                        <span className="text-white">{tokenData.basic.fundamental?.holder_concentration || "—"}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Liquidity</span>
+                        <span className="text-white">${Number(tokenData.basic.fundamental?.liquidity_usd || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-nexus-muted">Tax</span>
+                        <span className="text-white">B:{tokenData.basic.fundamental?.buy_tax || 0}% S:{tokenData.basic.fundamental?.sell_tax || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk */}
+                  {tokenData.risk && (
+                    <div>
+                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Risk Assessment</h3>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-nexus-muted">Level</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                            tokenData.risk.risk_level === "low" ? "bg-nexus-green/10 text-nexus-green" :
+                            tokenData.risk.risk_level === "medium" ? "bg-nexus-yellow/10 text-nexus-yellow" :
+                            "bg-nexus-red/10 text-nexus-red"
+                          }`}>{tokenData.risk.risk_level || "—"}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-nexus-muted">Approved</span>
+                          <span className={tokenData.risk.approved ? "text-nexus-green" : "text-nexus-red"}>
+                            {tokenData.risk.approved ? "Yes" : "No"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Meme */}
+                  {tokenData.basic.meme && (
+                    <div>
+                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">Meme Intel</h3>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-nexus-muted">Smart Money</span>
+                          <span className="text-white">{tokenData.basic.meme.smart_money_sentiment || "—"}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-nexus-muted">KOL</span>
+                          <span className="text-white text-[10px]">{tokenData.basic.meme.kol_activity || "—"}</span>
+                        </div>
+                        {tokenData.basic.meme.risk_factors?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {tokenData.basic.meme.risk_factors.map((r: string, i: number) => (
+                              <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-red/10 text-nexus-red">{r}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendation */}
+                  {tokenData.basic.recommendation && (
+                    <div className={`p-3 rounded-xl border ${
+                      tokenData.basic.recommendation === "BUY" ? "border-nexus-green/30 bg-nexus-green/5" :
+                      tokenData.basic.recommendation === "SELL" ? "border-nexus-red/30 bg-nexus-red/5" :
+                      tokenData.basic.recommendation === "AVOID" ? "border-nexus-red/30 bg-nexus-red/5" :
+                      "border-nexus-border"
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-nexus-muted">Signal</span>
+                        <span className={`text-sm font-bold ${
+                          tokenData.basic.recommendation === "BUY" ? "text-nexus-green" :
+                          tokenData.basic.recommendation === "SELL" || tokenData.basic.recommendation === "AVOID" ? "text-nexus-red" :
+                          "text-white"
+                        }`}>{tokenData.basic.recommendation}</span>
+                      </div>
+                      <p className="text-[10px] text-nexus-muted mt-1">{tokenData.basic.reasoning}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-nexus-muted text-sm">No data available</div>
+              )}
+            </div>
+
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col">
+              <div className="h-12 px-5 flex items-center justify-between border-b border-nexus-border shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-semibold text-sm">{currentTokenSymbol}</span>
+                  <span className="text-[10px] text-nexus-muted">AI Strategy Chat</span>
+                </div>
+                <button onClick={() => fetchTokenData(currentTokenSymbol, currentChat.address)} className="text-[10px] text-nexus-muted hover:text-white">Refresh Data</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {currentChat.history.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light"><IconChat /></div>
+                    <div className="text-center">
+                      <p className="text-white font-medium mb-1">Analyze {currentTokenSymbol}</p>
+                      <p className="text-nexus-muted text-xs mb-4">Ask AI about this token — analysis, strategies, buy/sell signals</p>
+                      <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                        {[
+                          `分析${currentTokenSymbol}的买入时机`,
+                          `${currentTokenSymbol} safe to buy?`,
+                          `深度分析${currentTokenSymbol}`,
+                          "聪明钱在买吗？",
+                          "设置止损策略",
+                          "和同类币对比",
+                        ].map((cmd, i) => (
+                          <button key={i} onClick={() => setChatInput(cmd)}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white hover:border-nexus-accent/40 transition-all">
+                            {cmd}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  currentChat.history.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
+                      {msg.role === "agent" && (
+                        <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">AI</div>
+                      )}
+                      <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {chatLoading && (
+                  <div className="flex justify-start animate-fade-in">
+                    <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">AI</div>
+                    <div className="chat-agent">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="px-5 py-4 border-t border-nexus-border shrink-0">
+                <div className="flex gap-3">
+                  <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && !chatLoading && handleTokenChat()}
+                    className="flex-1 input !rounded-xl" placeholder={`Ask about ${currentTokenSymbol}...`} disabled={chatLoading} />
+                  <button onClick={handleTokenChat} disabled={chatLoading || !chatInput.trim()}
+                    className="btn-primary !px-4 !py-3 !rounded-xl disabled:opacity-40"><IconSend /></button>
+                </div>
               </div>
             </div>
-            {!wallet ? (
-              <div className="p-8 text-center text-nexus-muted text-sm">Create or import a wallet to see PnL</div>
-            ) : !walletPnL ? (
-              <div className="p-8 text-center text-nexus-muted text-sm">Loading PnL data...</div>
-            ) : (
-              <div className="p-5 space-y-5">
-                {/* Overview Stats */}
+          </div>
+        )}
+
+        {/* ── WALLET VIEW ── */}
+        {activeView === "wallet" && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <h1 className="text-xl font-bold text-white mb-6">Wallet</h1>
+            <div className="max-w-md">
+              <div className="card">
+                {!wallet ? (
+                  <div className="space-y-3">
+                    <button onClick={handleConnectOKX} className="btn-primary w-full text-sm py-3 flex items-center justify-center gap-2">
+                      <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
+                      Connect OKX Wallet
+                    </button>
+                    <div className="text-[10px] text-nexus-muted text-center">0 Gas USDC · x402 Payments</div>
+                    <div className="border-t border-nexus-border my-2" />
+                    <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">Create Local Wallet</button>
+                    <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">Import Private Key</button>
+                    {passwordMode === "import" && (
+                      <div className="space-y-2 pt-2">
+                        <input type="password" value={importKey} onChange={e => setImportKey(e.target.value)} className="input" placeholder="Private key (0x...)" />
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleImport()} />
+                        <button onClick={handleImport} className="btn-primary w-full text-sm py-2.5">Import & Encrypt</button>
+                        <button onClick={() => { setPasswordMode(null); setImportKey(""); setPassword(""); }} className="btn-ghost w-full text-xs">Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-[10px] text-nexus-muted uppercase tracking-wider">X Layer Address</div>
+                    <div className="text-xs font-mono text-nexus-accent-light bg-nexus-bg p-3 rounded-xl break-all border border-nexus-border">{wallet}</div>
+                    <div className="flex items-center justify-between">
+                      <span className={`flex items-center gap-1.5 text-xs ${unlocked ? "text-nexus-green" : "text-nexus-muted"}`}>
+                        <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
+                        {walletMode === "okx" ? "OKX Wallet Connected" : unlocked ? "Unlocked" : "Locked"}
+                      </span>
+                      {walletMode === "local" && unlocked && (
+                        <button onClick={handleLock} className="btn-ghost text-xs">Lock</button>
+                      )}
+                    </div>
+                    {walletMode === "local" && !unlocked && passwordMode !== "set" && (
+                      <div className="space-y-2">
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                          className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleUnlock()} />
+                        <button onClick={handleUnlock} className="btn-primary w-full text-sm py-2.5">Unlock</button>
+                      </div>
+                    )}
+                    {passwordMode === "set" && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-nexus-yellow">Set trading password:</div>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                          className="input" placeholder="Min 6 characters" onKeyDown={e => e.key === "Enter" && handleSetPassword()} />
+                        <button onClick={handleSetPassword} className="btn-primary w-full text-sm py-2.5">Set Password</button>
+                      </div>
+                    )}
+                    {walletMode === "okx" && (
+                      <button onClick={() => { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }}
+                        className="btn-ghost text-xs text-nexus-red w-full">Disconnect OKX Wallet</button>
+                    )}
+                    <div className="text-[10px] text-nexus-muted flex items-center gap-1 mt-2">
+                      <IconShield /> {walletMode === "okx" ? "0 Gas x402 · OKX Wallet" : "Key encrypted in browser"}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── OVERVIEW VIEW ── */}
+        {activeView === "overview" && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <h1 className="text-xl font-bold text-white mb-6">Overview</h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="card">
+                <div className="stat-label">Total API Calls</div>
+                <div className="text-2xl font-bold text-white mt-1">{stats?.total_calls || 0}</div>
+              </div>
+              <div className="card">
+                <div className="stat-label">Revenue</div>
+                <div className="text-2xl font-bold text-nexus-green mt-1">${stats?.total_revenue_usd || "0"}</div>
+              </div>
+              <div className="card">
+                <div className="stat-label">Token Chats</div>
+                <div className="text-2xl font-bold text-nexus-accent-light mt-1">{tokenChatList.length}</div>
+              </div>
+            </div>
+
+            {/* PnL Section */}
+            {walletPnL && (
+              <div className="card">
+                <h2 className="text-sm font-semibold text-white mb-4">Wallet PnL</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
                     { label: "Total PnL", value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
                     { label: "Unrealized", value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
                     { label: "Win Rate", value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
-                    { label: "Total Trades", value: walletPnL.overview?.total_trades || "0", color: "text-white" },
+                    { label: "Trades", value: walletPnL.overview?.total_trades || "0", color: "text-white" },
                   ].map((s, i) => (
                     <div key={i} className="bg-nexus-bg rounded-xl p-3 border border-nexus-border">
                       <div className="stat-label">{s.label}</div>
@@ -793,168 +820,11 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-
-                {/* Recent Token PnL */}
-                {walletPnL.recent_pnl?.length > 0 && (
-                  <div>
-                    <h3 className="text-xs text-nexus-muted uppercase tracking-wider mb-2">Recent Token PnL</h3>
-                    <div className="space-y-1">
-                      {walletPnL.recent_pnl.map((p: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-nexus-bg transition-colors">
-                          <span className="text-sm text-white">{p.token}</span>
-                          <div className="flex items-center gap-3">
-                            <span className={`text-sm font-medium ${parseFloat(p.pnl_usd) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
-                              {parseFloat(p.pnl_usd) >= 0 ? "+" : ""}${p.pnl_usd}
-                            </span>
-                            <span className={`text-xs ${parseFloat(p.roi_pct) >= 0 ? "text-nexus-green" : "text-nexus-red"}`}>
-                              {parseFloat(p.roi_pct) >= 0 ? "+" : ""}{p.roi_pct}%
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recent Trades */}
-                {walletPnL.recent_trades?.length > 0 && (
-                  <div>
-                    <h3 className="text-xs text-nexus-muted uppercase tracking-wider mb-2">Recent Trades</h3>
-                    <div className="space-y-1">
-                      {walletPnL.recent_trades.map((tx: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-nexus-bg transition-colors text-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="price-tag">{tx.type}</span>
-                            <span className="text-white">{tx.token_in} → {tx.token_out}</span>
-                          </div>
-                          <span className="text-nexus-muted">${tx.amount_usd}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
         )}
-
-        {/* ── Pending Trade Alert ── */}
-        {pendingTrade && unlocked && (
-          <div className="card border-nexus-yellow/30 bg-nexus-yellow/5 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <IconBolt />
-                <span className="text-sm text-nexus-yellow font-medium">Pending trade ready to execute</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => executeTradeLocally(pendingTrade)}
-                  className="btn-primary text-sm py-1.5 px-5">Execute</button>
-                <button onClick={() => setPendingTrade(null)}
-                  className="btn-ghost text-sm">Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Chat ── */}
-        {activeTab === "chat" && <div className="card !p-0 overflow-hidden animate-fade-in">
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-nexus-border">
-            <div className="w-8 h-8 rounded-lg bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light">
-              <IconChat />
-            </div>
-            <div>
-              <h2 className="text-white font-semibold text-sm">Chat with AgentNexus</h2>
-              <p className="text-[10px] text-nexus-muted">Natural language trading · Chinese & English</p>
-            </div>
-            <div className="ml-auto flex items-center gap-1.5 text-[10px]">
-              {unlocked ? (
-                <span className="flex items-center gap-1 text-nexus-green"><span className="w-1.5 h-1.5 rounded-full bg-nexus-green" />Ready to trade</span>
-              ) : (
-                <span className="flex items-center gap-1 text-nexus-muted"><IconLock />Wallet locked</span>
-              )}
-            </div>
-          </div>
-
-          <div className="h-[420px] overflow-y-auto p-5 space-y-4 bg-nexus-bg/50">
-            {chatHistory.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center gap-6">
-                <div className="w-14 h-14 rounded-2xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light">
-                  <IconChat />
-                </div>
-                <div className="text-center">
-                  <p className="text-nexus-muted text-sm mb-4">Ask anything about crypto markets or execute trades</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {["分析下ETH", "what's trending?", "帮我换1 OKB到USDT", "查看我的持仓"].map((cmd, i) => (
-                      <button
-                        key={i}
-                        onClick={() => { setChatInput(cmd); }}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white hover:border-nexus-accent/40 transition-all"
-                      >
-                        {cmd}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              chatHistory.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
-                  {msg.role === "agent" && (
-                    <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">
-                      AI
-                    </div>
-                  )}
-                  <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
-                    <div className="whitespace-pre-wrap">{msg.text}</div>
-                  </div>
-                </div>
-              ))
-            )}
-            {chatLoading && (
-              <div className="flex justify-start animate-fade-in">
-                <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">
-                  AI
-                </div>
-                <div className="chat-agent">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          <div className="px-5 py-4 border-t border-nexus-border bg-nexus-card/50">
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !chatLoading && handleChat()}
-                className="flex-1 input !rounded-xl"
-                placeholder="Ask anything... (Chinese or English)"
-                disabled={chatLoading}
-              />
-              <button
-                onClick={handleChat}
-                disabled={chatLoading || !chatInput.trim()}
-                className="btn-primary !px-4 !py-3 !rounded-xl disabled:opacity-40 disabled:shadow-none disabled:transform-none"
-              >
-                <IconSend />
-              </button>
-            </div>
-          </div>
-        </div>}
-
-        {/* Footer */}
-        <div className="text-center text-[10px] text-nexus-muted py-4">
-          AgentNexus v1.0.0 · X Layer AI Agent Hackathon ·{" "}
-          <a href="https://github.com/wanggang22/agent-nexus" className="text-nexus-accent-light hover:underline">GitHub</a>
-        </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
