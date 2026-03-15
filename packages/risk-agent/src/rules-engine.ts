@@ -136,3 +136,25 @@ export async function portfolioRisk(walletAddress: string, chain = "xlayer") {
     timestamp: new Date().toISOString(),
   };
 }
+
+/**
+ * Get specific token balances for a wallet.
+ */
+export async function tokenBalances(walletAddress: string, tokenAddresses: string[], chain = "xlayer") {
+  const tokens = tokenAddresses.join(",");
+  const raw = runOnchainos(`portfolio token-balances --address ${walletAddress} --tokens ${tokens} --chains ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data || parsed || [];
+
+  return {
+    wallet: walletAddress,
+    chain,
+    balances: Array.isArray(data) ? data.map((b: any) => ({
+      token: b.symbol || b.tokenSymbol || "",
+      address: b.tokenAddress || b.address || "",
+      balance: b.balance || b.amount || "0",
+      value_usd: b.valueUsd || b.value || "0",
+    })) : [],
+    timestamp: new Date().toISOString(),
+  };
+}

@@ -86,6 +86,9 @@ const AGENTS = [
       { method: "GET", route: "/signals/trending", price: "free", description: "Trending tokens" },
       { method: "GET", route: "/signals/hot-tokens", price: "free", description: "Hot tokens by trending score / X mentions" },
       { method: "GET", route: "/signals/wallet-pnl", price: "free", description: "Wallet PnL overview + trade history" },
+      { method: "GET", route: "/signals/aped-wallets", price: "free", description: "Co-invested wallet analysis for a token" },
+      { method: "GET", route: "/signals/token-pnl", price: "free", description: "PnL for specific token in wallet" },
+      { method: "POST", route: "/signals/batch-prices", price: "free", description: "Batch price query for multiple tokens" },
     ],
   },
   {
@@ -121,6 +124,7 @@ const AGENTS = [
       { method: "POST", route: "/risk/assess", price: "free", description: "Pre-trade risk assessment" },
       { method: "GET", route: "/risk/token-safety/:token", price: "free", description: "Token safety check" },
       { method: "GET", route: "/risk/portfolio", price: "free", description: "Portfolio risk overview" },
+      { method: "POST", route: "/risk/token-balances", price: "free", description: "Specific token balances for wallet" },
     ],
   },
   {
@@ -134,6 +138,9 @@ const AGENTS = [
       { method: "POST", route: "/trade/approve", price: "free", description: "ERC-20 token approval" },
       { method: "GET", route: "/trade/gas", price: "free", description: "Current gas prices" },
       { method: "GET", route: "/trade/liquidity-sources", price: "free", description: "Available DEX liquidity sources" },
+      { method: "POST", route: "/trade/gas-limit", price: "free", description: "Estimate gas limit for transaction" },
+      { method: "POST", route: "/trade/broadcast", price: "free", description: "Broadcast signed transaction" },
+      { method: "GET", route: "/trade/broadcast-status/:orderId", price: "free", description: "Track broadcast order" },
     ],
   },
 ];
@@ -182,6 +189,9 @@ SIGNAL (free):
 - GET /signals/trending — trending tokens
 - GET /signals/hot-tokens — hot tokens ranked by trending score / X mentions
 - GET /signals/wallet-pnl?wallet={wallet} — wallet PnL, win rate, trade history
+- GET /signals/aped-wallets?token={token} — who else invested in this token (co-investors)
+- GET /signals/token-pnl?wallet={wallet}&token={token} — PnL for specific token
+- POST /signals/batch-prices (body: {addresses: [...]}) — batch price query
 
 ANALYST BASIC (free, rule-based):
 - GET /basic/technical/{token} — basic technical analysis
@@ -202,6 +212,7 @@ RISK (free):
 - POST /risk/assess (body: {token, chain}) — pre-trade risk
 - GET /risk/token-safety/{token} — token safety check
 - GET /risk/portfolio?wallet={wallet} — portfolio risk
+- POST /risk/token-balances (body: {wallet, tokens: [...]}) — specific token balances
 
 TRADER (free):
 - POST /trade/quote (body: {from_token, to_token, amount}) — get quote
@@ -209,6 +220,8 @@ TRADER (free):
 - POST /trade/approve (body: {token, wallet_address, amount}) — ERC-20 approval
 - GET /trade/gas — current gas prices
 - GET /trade/liquidity-sources — available DEX sources
+- POST /trade/gas-limit (body: {from, to, data}) — estimate gas limit
+- POST /trade/broadcast (body: {signed_tx}) — broadcast signed tx
 
 Rules:
 - Extract token symbols (ETH, OKB, USDT...) or addresses (0x...) from the message.
@@ -224,6 +237,9 @@ Rules:
 - For "trending", "热门", "hot", "火" → signals/hot-tokens (preferred) or signals/trending
 - For "PnL", "盈亏", "win rate", "胜率", "我的交易", "trade history" → signals/wallet-pnl (use user's wallet)
 - For "bundle", "sniper", "捆绑", "狙击" → basic/meme-deep (more data than basic/meme)
+- For "谁买了", "who bought", "co-investor", "aped" → signals/aped-wallets
+- For "我有多少", "balance", "余额" + token → risk/token-balances
+- For specific token PnL like "我的ETH盈亏" → signals/token-pnl
 - For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
 - For "gas", "手续费" → trade/gas
 - For "portfolio risk", "持仓风险" → risk/portfolio

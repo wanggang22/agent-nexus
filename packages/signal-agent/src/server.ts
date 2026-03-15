@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { getSmartMoneySignals, getWhaleAlerts, getMemeScan, getTrendingTokens, getHotTokens, getWalletPnL } from "./scanner.js";
+import { getSmartMoneySignals, getWhaleAlerts, getMemeScan, getTrendingTokens, getHotTokens, getWalletPnL, getApedWallets, getTokenPnL, getBatchPrices } from "./scanner.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Signal Agent";
@@ -80,6 +80,45 @@ app.get("/signals/wallet-pnl", async (req, res) => {
     if (!wallet) return res.status(400).json({ error: "wallet address required" });
     const result = await getWalletPnL(wallet, chain);
     recordCall(AGENT, "wallet-pnl", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/signals/aped-wallets", async (req, res) => {
+  try {
+    const token = req.query.token as string;
+    const chain = (req.query.chain as string) || "xlayer";
+    if (!token) return res.status(400).json({ error: "token address required" });
+    const result = await getApedWallets(token, chain);
+    recordCall(AGENT, "aped-wallets", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/signals/token-pnl", async (req, res) => {
+  try {
+    const wallet = req.query.wallet as string;
+    const token = req.query.token as string;
+    const chain = (req.query.chain as string) || "xlayer";
+    if (!wallet || !token) return res.status(400).json({ error: "wallet and token required" });
+    const result = await getTokenPnL(wallet, token, chain);
+    recordCall(AGENT, "token-pnl", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/signals/batch-prices", async (req, res) => {
+  try {
+    const { addresses, chain } = req.body;
+    if (!addresses || !Array.isArray(addresses)) return res.status(400).json({ error: "addresses array required" });
+    const result = await getBatchPrices(addresses, chain || "xlayer");
+    recordCall(AGENT, "batch-prices", 0);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

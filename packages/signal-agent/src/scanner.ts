@@ -239,3 +239,65 @@ export async function getWalletPnL(walletAddress: string, chain = "xlayer") {
     timestamp: new Date().toISOString(),
   };
 }
+
+export async function getApedWallets(tokenAddress: string, chain = "xlayer") {
+  const raw = runOnchainos(`memepump aped-wallet --address ${tokenAddress} --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const items = parsed?.data || parsed || [];
+
+  return {
+    token: tokenAddress,
+    chain,
+    aped_wallets: Array.isArray(items) ? items.slice(0, 20).map((w: any) => ({
+      address: w.walletAddress || w.address || "",
+      amount_usd: w.amountUsd || w.amount || "0",
+      pnl_usd: w.pnl || w.realizedPnl || "0",
+      roi_pct: w.roi || w.roiPercent || "0",
+      is_smart_money: w.isSmartMoney || w.walletType === 1 || false,
+      is_whale: w.isWhale || w.walletType === 3 || false,
+    })) : [],
+    count: Array.isArray(items) ? items.length : 0,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export async function getTokenPnL(walletAddress: string, tokenAddress: string, chain = "xlayer") {
+  const raw = runOnchainos(`market portfolio-token-pnl --address ${walletAddress} --token ${tokenAddress} --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data || parsed || {};
+
+  return {
+    wallet: walletAddress,
+    token: tokenAddress,
+    chain,
+    pnl_usd: data.pnl || data.realizedPnl || "0",
+    unrealized_pnl_usd: data.unrealizedPnl || "0",
+    avg_buy_price: data.avgBuyPrice || data.averageCost || "0",
+    avg_sell_price: data.avgSellPrice || "0",
+    total_bought: data.totalBought || data.buyAmount || "0",
+    total_sold: data.totalSold || data.sellAmount || "0",
+    roi_pct: data.roi || data.roiPercent || "0",
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export async function getBatchPrices(tokenAddresses: string[], chain = "xlayer") {
+  const addressList = tokenAddresses.join(",");
+  const raw = runOnchainos(`market prices --addresses ${addressList} --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const items = parsed?.data || parsed || [];
+
+  return {
+    chain,
+    prices: Array.isArray(items) ? items.map((p: any) => ({
+      address: p.tokenAddress || p.address || "",
+      symbol: p.symbol || "",
+      price: p.price || "0",
+      change_24h: p.priceChange24h || p.change24h || "0",
+      volume_24h: p.volume24h || "0",
+      market_cap: p.marketCapUsd || "0",
+    })) : [],
+    count: Array.isArray(items) ? items.length : 0,
+    timestamp: new Date().toISOString(),
+  };
+}

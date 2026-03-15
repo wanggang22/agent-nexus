@@ -336,3 +336,60 @@ export async function getLiquiditySources(chain = "xlayer") {
     timestamp: new Date().toISOString(),
   };
 }
+
+/**
+ * Estimate gas limit for a transaction.
+ */
+export async function estimateGasLimit(
+  from: string,
+  to: string,
+  data: string,
+  value = "0",
+  chain = "xlayer"
+) {
+  const raw = runOnchainos(
+    `gateway gas-limit --from ${from} --to ${to} --data ${data} --value ${value} --chain ${chain}`
+  );
+  const parsed = safeJsonParse(raw);
+  const gasLimit = parsed?.data?.gasLimit || parsed?.gasLimit || parsed?.data || "0";
+
+  return {
+    chain,
+    gas_limit: gasLimit.toString(),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Broadcast a signed transaction.
+ */
+export async function broadcastTx(signedTx: string, chain = "xlayer") {
+  const raw = runOnchainos(`gateway broadcast --signed-tx ${signedTx} --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data || parsed || {};
+
+  return {
+    success: !!data.txHash || !!data.hash,
+    tx_hash: data.txHash || data.hash || "",
+    chain,
+    explorer: data.txHash ? `https://www.okx.com/web3/explorer/xlayer/tx/${data.txHash}` : "",
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Track broadcast order status.
+ */
+export async function trackBroadcastOrder(orderId: string, chain = "xlayer") {
+  const raw = runOnchainos(`gateway orders --order-id ${orderId} --chain ${chain}`);
+  const parsed = safeJsonParse(raw);
+  const data = parsed?.data || parsed || {};
+
+  return {
+    order_id: orderId,
+    status: data.status || "unknown",
+    tx_hash: data.txHash || data.hash || "",
+    chain,
+    timestamp: new Date().toISOString(),
+  };
+}

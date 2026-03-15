@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { assessRisk, tokenSafety, portfolioRisk } from "./rules-engine.js";
+import { assessRisk, tokenSafety, portfolioRisk, tokenBalances } from "./rules-engine.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Risk Agent";
@@ -47,6 +47,18 @@ app.get("/risk/portfolio", async (req, res) => {
     if (!wallet) return res.status(400).json({ error: "wallet address required" });
     const result = await portfolioRisk(wallet, chain);
     recordCall(AGENT, "portfolio", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/risk/token-balances", async (req, res) => {
+  try {
+    const { wallet, tokens, chain } = req.body;
+    if (!wallet || !tokens) return res.status(400).json({ error: "wallet and tokens array required" });
+    const result = await tokenBalances(wallet, Array.isArray(tokens) ? tokens : [tokens], chain);
+    recordCall(AGENT, "token-balances", 0);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

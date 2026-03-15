@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
-import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress, getApproval, getGasPrice, getLiquiditySources } from "./executor.js";
+import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress, getApproval, getGasPrice, getLiquiditySources, estimateGasLimit, broadcastTx, trackBroadcastOrder } from "./executor.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const AGENT = "Trader Agent";
@@ -107,6 +107,41 @@ app.get("/trade/liquidity-sources", async (req, res) => {
     const chain = (req.query.chain as string) || "xlayer";
     const result = await getLiquiditySources(chain);
     recordCall(AGENT, "liquidity-sources", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/trade/gas-limit", async (req, res) => {
+  try {
+    const { from, to, data, value, chain } = req.body;
+    if (!from || !to || !data) return res.status(400).json({ error: "from, to, data required" });
+    const result = await estimateGasLimit(from, to, data, value, chain);
+    recordCall(AGENT, "gas-limit", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/trade/broadcast", async (req, res) => {
+  try {
+    const { signed_tx, chain } = req.body;
+    if (!signed_tx) return res.status(400).json({ error: "signed_tx required" });
+    const result = await broadcastTx(signed_tx, chain);
+    recordCall(AGENT, "broadcast", 0);
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/trade/broadcast-status/:orderId", async (req, res) => {
+  try {
+    const chain = (req.query.chain as string) || "xlayer";
+    const result = await trackBroadcastOrder(req.params.orderId, chain);
+    recordCall(AGENT, "broadcast-status", 0);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
