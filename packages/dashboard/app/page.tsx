@@ -119,13 +119,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!wallet) return;
     fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
-    // Fetch USDC balance & allowance
+    // Fetch USDC balance & allowance via Gateway (server-side query, more reliable)
     fetch(`${GATEWAY}/payment/info`).then(r => r.json()).then(info => {
       setPlatformWallet(info.platform_wallet || "");
-      if (info.platform_wallet) {
-        getUSDCBalance(wallet).then(setUsdcBalance);
-        getUSDCAllowance(wallet, info.platform_wallet).then(setUsdcAllowance);
-      }
+    }).catch(() => {});
+    fetch(`${GATEWAY}/payment/allowance/${wallet}`).then(r => r.json()).then(data => {
+      if (data.balance_usdc) setUsdcBalance(data.balance_usdc);
+      if (data.allowance_usdc) setUsdcAllowance(data.allowance_usdc);
+      if (data.platform_wallet) setPlatformWallet(data.platform_wallet);
     }).catch(() => {});
   }, [wallet]);
 
