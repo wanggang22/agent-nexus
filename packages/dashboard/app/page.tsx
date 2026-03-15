@@ -303,6 +303,8 @@ export default function Dashboard() {
     }
   };
 
+  const [connectingOKX, setConnectingOKX] = useState(false);
+
   // ── Determine if user is "logged in" (Twitter OR OKX Wallet) ──
   const isLoggedIn = !!session || !!wallet;
   const userId = twitterId || (wallet ? `wallet_${wallet.slice(0, 8)}` : null);
@@ -310,15 +312,19 @@ export default function Dashboard() {
 
   // OKX Wallet login from landing page (no Twitter needed)
   const handleOKXLogin = async () => {
-    const result = await connectOKXWallet();
-    if (result) {
-      setWallet(result.address);
-      setWalletMode("okx");
-      setUnlocked(true);
-      // Fetch data after wallet connect
-      fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
-      fetchHotTokens();
-      fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${result.address}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
+    setConnectingOKX(true);
+    try {
+      const result = await connectOKXWallet();
+      if (result) {
+        setWallet(result.address);
+        setWalletMode("okx");
+        setUnlocked(true);
+        fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
+        fetchHotTokens();
+        fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${result.address}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
+      }
+    } finally {
+      setConnectingOKX(false);
     }
   };
 
@@ -368,9 +374,12 @@ export default function Dashboard() {
               track smart money, and execute — all with natural language.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button onClick={handleOKXLogin} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
-                <span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span>
-                Connect OKX Wallet
+              <button onClick={handleOKXLogin} disabled={connectingOKX} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4 disabled:opacity-60">
+                {connectingOKX ? (
+                  <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Connecting...</>
+                ) : (
+                  <><span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span> Connect OKX Wallet</>
+                )}
               </button>
               <button onClick={() => signIn("twitter")} className="btn-secondary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
                 <IconX /> Login with X
