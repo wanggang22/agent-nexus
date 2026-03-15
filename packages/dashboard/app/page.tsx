@@ -112,11 +112,21 @@ export default function Dashboard() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [tokenChats, chatLoading]);
 
-  // Persist token chats to localStorage
+  // Persist token chats to localStorage + server
   useEffect(() => {
     try {
       const arr = Array.from(tokenChats.entries());
-      if (arr.length > 0) localStorage.setItem("agentnexus_chats", JSON.stringify(arr));
+      if (arr.length > 0) {
+        localStorage.setItem("agentnexus_chats", JSON.stringify(arr));
+        // Sync to server (debounced by React batching)
+        if (userId) {
+          fetch(`${GATEWAY}/chats/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: userId, chats: arr }),
+          }).catch(() => {});
+        }
+      }
     } catch {}
   }, [tokenChats]);
 
@@ -139,6 +149,7 @@ export default function Dashboard() {
     fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
     fetchHotTokens();
   }, [twitterId]);
+
 
   // Fetch wallet PnL + USDC info
   useEffect(() => {
@@ -403,11 +414,6 @@ export default function Dashboard() {
 
   const [connectingOKX, setConnectingOKX] = useState(false);
 
-  // ── Determine if user is "logged in" (Twitter OR OKX Wallet) ──
-  const isLoggedIn = !!session || !!wallet;
-  const userId = twitterId || (wallet ? `wallet_${wallet.slice(0, 8)}` : null);
-  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
-
   // OKX Wallet login from landing page (no Twitter needed)
   const handleOKXLogin = async () => {
     setConnectingOKX(true);
@@ -425,6 +431,27 @@ export default function Dashboard() {
       setConnectingOKX(false);
     }
   };
+
+  // ── Determine if user is logged in ──
+  const isLoggedIn = !!session || !!wallet;
+  const userId = twitterId || (wallet ? `wallet_${wallet.slice(0, 8)}` : null);
+  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+
+  // Load chat history from server (merge with localStorage)
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`${GATEWAY}/chats/load/${userId}`).then(r => r.json()).then(data => {
+      if (data.chats && Array.isArray(data.chats) && data.chats.length > 0) {
+        const serverChats = new Map<string, TokenChat>(data.chats);
+        setTokenChats(prev => {
+          if (prev.size === 0) return serverChats;
+          const merged = new Map(serverChats);
+          for (const [k, v] of prev) merged.set(k, v);
+          return merged;
+        });
+      }
+    }).catch(() => {});
+  }, [userId]);
 
   // ── Loading ──
   if (status === "loading") {

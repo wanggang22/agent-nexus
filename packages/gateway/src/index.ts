@@ -450,8 +450,59 @@ app.post("/trade/sign-and-send", async (req, res) => {
   }
 });
 
+// ── Chat history persistence (Railway Volume at /data) ──
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+
+const STORAGE_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data";
+const CHATS_FILE = `${STORAGE_DIR}/chat-histories.json`;
+const WALLETS_FILE = `${STORAGE_DIR}/encrypted-wallets.json`;
+
+// Ensure storage dir exists
+try { mkdirSync(STORAGE_DIR, { recursive: true }); } catch {}
+
+// Load persisted chat histories
+let chatStore: Record<string, any> = {};
+try {
+  if (existsSync(CHATS_FILE)) chatStore = JSON.parse(readFileSync(CHATS_FILE, "utf-8"));
+} catch { chatStore = {}; }
+
+function saveChatStore() {
+  try { writeFileSync(CHATS_FILE, JSON.stringify(chatStore)); } catch (e: any) {
+    console.error("[ChatStore] Save failed:", e.message);
+  }
+}
+
+// Save chat history
+app.post("/chats/save", (req, res) => {
+  const { user_id, chats } = req.body;
+  if (!user_id || !chats) return res.status(400).json({ error: "user_id and chats required" });
+  chatStore[user_id] = { chats, updated: new Date().toISOString() };
+  saveChatStore();
+  res.json({ success: true });
+});
+
+// Load chat history
+app.get("/chats/load/:userId", (req, res) => {
+  const data = chatStore[req.params.userId];
+  res.json({ chats: data?.chats || null, updated: data?.updated || null });
+});
+
+// Delete chat history
+app.delete("/chats/:userId", (req, res) => {
+  delete chatStore[req.params.userId];
+  saveChatStore();
+  res.json({ success: true });
+});
+
 // ── Cloud wallet sync: store encrypted blobs (server never has password/key) ──
-const encryptedWallets = new Map<string, string>(); // "twitter_123" → encrypted JSON blob
+// Load persisted wallets
+let encryptedWallets = new Map<string, string>();
+try {
+  if (existsSync(WALLETS_FILE)) {
+    const data = JSON.parse(readFileSync(WALLETS_FILE, "utf-8"));
+    encryptedWallets = new Map(Object.entries(data));
+  }
+} catch {}
 
 app.post("/wallet/sync", (req, res) => {
   const { platform, user_id, encrypted_wallet } = req.body;
@@ -459,6 +510,8 @@ app.post("/wallet/sync", (req, res) => {
     return res.status(400).json({ error: "platform, user_id, encrypted_wallet required" });
   }
   encryptedWallets.set(`${platform}_${user_id}`, encrypted_wallet);
+  // Persist to volume
+  try { writeFileSync(WALLETS_FILE, JSON.stringify(Object.fromEntries(encryptedWallets))); } catch {}
   res.json({ success: true });
 });
 
