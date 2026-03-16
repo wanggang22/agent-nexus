@@ -151,6 +151,42 @@ export async function sendOKXTransaction(tx: {
 }
 
 /**
+ * Check if running inside OKX Wallet in-app browser
+ */
+export function isInOKXApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes("okx") || ua.includes("okapp") || !!(window as any).okxwallet;
+}
+
+/**
+ * Auto-connect if inside OKX Wallet (no user action needed after first auth)
+ */
+export async function autoConnectOKX(): Promise<{ address: string } | null> {
+  const okx = getOKXProvider();
+  if (!okx) return null;
+
+  try {
+    // eth_accounts doesn't prompt — returns [] if not yet authorized
+    const accounts = await okx.request({ method: "eth_accounts" });
+    if (accounts && accounts.length > 0) {
+      // Already authorized — switch to X Layer silently
+      try {
+        await okx.request({ method: "wallet_switchEthereumChain", params: [{ chainId: XLAYER_CHAIN_ID }] });
+      } catch (e: any) {
+        if (e.code === 4902) {
+          await okx.request({ method: "wallet_addEthereumChain", params: [XLAYER_CONFIG] });
+        }
+      }
+      connectedAddress = accounts[0] as string;
+      console.log(`[OKX Wallet] Auto-connected: ${connectedAddress}`);
+      return { address: connectedAddress };
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Check if connected
  */
 export function isOKXConnected(): boolean {

@@ -2,7 +2,7 @@
 
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
-import { connectOKXWallet, sendOKXTransaction } from "./okx-wallet";
+import { connectOKXWallet, sendOKXTransaction, autoConnectOKX } from "./okx-wallet";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
@@ -243,6 +243,13 @@ export default function Dashboard() {
   // ── Auth ──
   const isLoggedIn = !!session || !!wallet;
   const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+
+  // Auto-connect OKX Wallet if previously authorized (e.g. in OKX App browser)
+  useEffect(() => {
+    autoConnectOKX().then(result => {
+      if (result) { setWallet(result.address); setWalletMode("okx"); }
+    });
+  }, []);
 
   const handleConnectOKX = async () => {
     const result = await connectOKXWallet();
