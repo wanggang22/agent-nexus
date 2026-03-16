@@ -327,11 +327,12 @@ Rules:
 - For "gas", "手续费" → trade/gas
 - For "portfolio risk", "持仓风险" → risk/portfolio
 - For "launch", "deploy", "create token", "发币", "发射", "创建代币", "上线代币" → use agent "launch", method POST, path "/launch", body {name, symbol, totalSupply, okbForLiquidity}. Extract token name/symbol/supply from user message. Default: 1B supply, 0.1 OKB liquidity.
+- For "strategy", "策略", "monitor", "监控", "watch", "盯", "filter", "筛选", "alert", "提醒", "notify", "通知", "开个策略", "建个策略", "自动" → use agent "strategy", method POST, path "/strategies", body {name, description}. Extract strategy name and filter description from user message. The description should be the user's natural language filter criteria.
 - Default chain: xlayer.
 - Max 3 calls. If user wants comprehensive view, combine risk + analyst.
 
 Return ONLY valid JSON:
-{"calls":[{"agent":"signal"|"analyst"|"risk"|"trader"|"launch","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
+{"calls":[{"agent":"signal"|"analyst"|"risk"|"trader"|"launch"|"strategy","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
 
 const GATEWAY_SELF = `http://localhost:${PORT}`;
 const AGENT_ENDPOINTS: Record<string, string> = {
@@ -340,6 +341,7 @@ const AGENT_ENDPOINTS: Record<string, string> = {
   risk: RISK_URL,
   trader: TRADER_URL,
   launch: GATEWAY_SELF,
+  strategy: GATEWAY_SELF,
 };
 
 // User wallet address — also creates if doesn't exist
@@ -952,7 +954,7 @@ app.post("/chat", async (req, res) => {
     }
 
     // x402 quota check: trading, launch, strategy actions cost credits; pure data queries are free
-    const paidAgents = ["trader", "launch"];
+    const paidAgents = ["trader", "launch", "strategy"];
     const hasPaidAction = calls.some(c => paidAgents.includes(c.agent));
     if (hasPaidAction && wallet_address) {
       const quota = checkAndDeductQuota(wallet_address);
@@ -1016,6 +1018,11 @@ app.post("/chat", async (req, res) => {
           // Launch: inject user wallet address into body
           if (call.agent === "launch") {
             body = { ...(body || {}), from: (req.body as any).wallet_address || userWalletAddress || "0x0000000000000000000000000000000000000000" };
+          }
+
+          // Strategy: inject wallet_address into body
+          if (call.agent === "strategy") {
+            body = { ...(body || {}), wallet_address: (req.body as any).wallet_address || userWalletAddress };
           }
 
           // Trade execution requires password — return preview instead

@@ -3,6 +3,8 @@
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
 import { connectOKXWallet, sendOKXTransaction, autoConnectOKX } from "./okx-wallet";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
@@ -741,7 +743,13 @@ export default function Dashboard() {
                   {activeChat.messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
-                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                        {msg.role === "ai" ? (
+                          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white prose-td:text-xs prose-th:text-xs prose-table:text-xs">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div className="whitespace-pre-wrap">{msg.text}</div>
+                        )}
                       </div>
                     </div>
                   ))}
