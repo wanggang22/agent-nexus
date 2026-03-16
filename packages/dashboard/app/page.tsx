@@ -74,7 +74,7 @@ const Icon = ({ d, cls = "w-5 h-5" }: { d: string; cls?: string }) => (
 );
 
 // ── Types ──
-interface ChatMessage { role: "user" | "ai"; text: string; tradeConfirm?: { summary: string; params: any }; tradeTxHash?: string }
+interface ChatMessage { role: "user" | "ai"; text: string }
 interface ChatThread { id: string; title: string; messages: ChatMessage[]; createdAt: number }
 interface LaunchRecord { id: string; name: string; symbol: string; address?: string; status: "draft" | "launching" | "live"; createdAt: number }
 interface Strategy { id: string; name: string; description: string; status: "running" | "paused"; results: string[]; createdAt: number }
@@ -296,18 +296,19 @@ export default function Dashboard() {
       // Check if it's a trade confirmation
       const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
 
-      if (tradeResult) {
+      if (tradeResult && wallet && walletMode === "okx") {
         const td = tradeResult.data;
-        const aiMsg: ChatMessage = {
-          role: "ai", text: data.reply || td.summary,
-          tradeConfirm: { summary: td.summary, params: td.trade_params },
-        };
+        // Show AI reply first
         setChatThreads(prev => prev.map(c =>
-          c.id === threadId ? { ...c, messages: [...c.messages, aiMsg] } : c
+          c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: data.reply || td.summary }] } : c
         ));
+        // Directly execute trade via OKX Wallet — no confirmation button
+        executeTrade(threadId!, td.trade_params);
       } else {
         const replyText = launchResult
           ? `I've prepared a token launch plan. Go to the Launch tab to complete it.`
+          : tradeResult && !wallet
+          ? `${data.reply || tradeResult.data.summary}\n\n${lang === "zh" ? "请先连接 OKX 钱包" : "Please connect OKX Wallet first"}`
           : (data.reply || data.error || "No response");
         setChatThreads(prev => prev.map(c =>
           c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: replyText }] } : c
@@ -322,66 +323,36 @@ export default function Dashboard() {
     }
   };
 
-  // ── Trade confirmation handler ──
-  const handleConfirmTrade = async (threadId: string, msgIndex: number, params: any) => {
-    if (!wallet || walletMode !== "okx") {
-      alert(t.needOKXWallet);
-      return;
-    }
+  // ── Direct trade execution via OKX Wallet (no confirmation step) ──
+  const executeTrade = async (threadId: string, params: any) => {
+    const provider = (window as any).okxwallet;
+    if (!provider || !wallet) return;
 
-    // Update message to show "executing"
-    setChatThreads(prev => prev.map(c => {
-      if (c.id !== threadId) return c;
-      const msgs = [...c.messages];
-      msgs[msgIndex] = { ...msgs[msgIndex], tradeConfirm: undefined, text: msgs[msgIndex].text + `\n\n${lang === "zh" ? "交易执行中..." : "Executing trade..."}` };
-      return { ...c, messages: msgs };
-    }));
+    // Show "executing" message
+    const execMsg = lang === "zh" ? "正在准备交易，请在 OKX Wallet 中签名..." : "Preparing trade, please sign in OKX Wallet...";
+    setChatThreads(prev => prev.map(c =>
+      c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: execMsg }] } : c
+    ));
 
     try {
-      // Build trade via gateway
-      const resp = await fetch(`${GATEWAY}/trade/sign-and-send`, {
+      // Build unsigned tx via trader agent
+      const buildResp = await fetch(`${GATEWAY}/trade/quote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...params, wallet_address: wallet }),
+        body: JSON.stringify({ from_token: params.from_token, to_token: params.to_token, amount: params.amount, wallet_address: wallet }),
       });
 
-      if (resp.status === 402) {
-        handle402(await resp.json(), () => handleConfirmTrade(threadId, msgIndex, params));
+      if (buildResp.status === 402) {
+        handle402(await buildResp.json(), () => executeTrade(threadId, params));
         return;
       }
 
-      const data = await resp.json();
-
-      // For OKX Wallet: we need to sign client-side, so use the trade/build flow
-      // Actually, trade/sign-and-send requires private key which we don't have in browser
-      // So we need to build the tx and sign via OKX Wallet
-      const buildResp = await fetch(`${GATEWAY.replace(/\/+$/, '')}/trade/quote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...params, wallet_address: wallet }),
-      });
-
-      // Try direct execution via OKX Wallet by building tx from trader agent
-      const provider = (window as any).okxwallet;
-      if (!provider) throw new Error("OKX Wallet not found");
-
-      // Use the trader agent to build unsigned tx
-      const traderUrl = GATEWAY;
-      const buildRes = await fetch(`${traderUrl}/trade/quote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from_token: params.from_token,
-          to_token: params.to_token,
-          amount: params.amount,
-          wallet_address: wallet,
-        }),
-      });
-      const quoteData = await buildRes.json();
+      const quoteData = await buildResp.json();
+      const tx = quoteData.tx || quoteData.data?.tx;
 
       let resultText: string;
-      if (quoteData.tx || quoteData.data?.tx) {
-        const tx = quoteData.tx || quoteData.data?.tx;
+      if (tx) {
+        // Sign via OKX Wallet — this is the only popup
         const txHash = await provider.request({
           method: "eth_sendTransaction",
           params: [{ from: wallet, to: tx.to, data: tx.data, value: tx.value || "0x0", chainId: "0xc4" }],
@@ -399,23 +370,24 @@ export default function Dashboard() {
           ? `${lang === "zh" ? "交易成功！" : "Trade executed!"}\nTx: ${txHash}\nhttps://www.okx.com/web3/explorer/xlayer/tx/${txHash}`
           : `${lang === "zh" ? "交易已提交" : "Trade submitted"}: ${txHash}`;
       } else {
-        // Fallback: show quote info
-        resultText = data.success
-          ? `${lang === "zh" ? "交易成功！" : "Trade executed!"}\nTx: ${data.tx_hash}\n${data.explorer || ""}`
-          : `${lang === "zh" ? "交易失败" : "Trade failed"}: ${data.error || "Unknown error"}`;
+        resultText = `${lang === "zh" ? "无法构建交易" : "Could not build trade"}: ${quoteData.error || JSON.stringify(quoteData).slice(0, 200)}`;
       }
 
+      // Replace "executing" message with result
       setChatThreads(prev => prev.map(c => {
         if (c.id !== threadId) return c;
         const msgs = [...c.messages];
-        msgs[msgIndex] = { ...msgs[msgIndex], text: resultText };
+        msgs[msgs.length - 1] = { role: "ai", text: resultText };
         return { ...c, messages: msgs };
       }));
     } catch (e: any) {
+      const errText = e.code === 4001
+        ? (lang === "zh" ? "交易已取消" : "Trade cancelled")
+        : `${lang === "zh" ? "交易失败" : "Trade failed"}: ${e.message}`;
       setChatThreads(prev => prev.map(c => {
         if (c.id !== threadId) return c;
         const msgs = [...c.messages];
-        msgs[msgIndex] = { ...msgs[msgIndex], text: `${lang === "zh" ? "交易失败" : "Trade failed"}: ${e.message}` };
+        msgs[msgs.length - 1] = { role: "ai", text: errText };
         return { ...c, messages: msgs };
       }));
     }
@@ -763,27 +735,6 @@ export default function Dashboard() {
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
                         <div className="whitespace-pre-wrap">{msg.text}</div>
-                        {msg.tradeConfirm && (
-                          <div className="mt-3 p-3 bg-white/5 rounded-xl space-y-2">
-                            <div className="text-xs text-nexus-muted">{msg.tradeConfirm.summary}</div>
-                            <div className="flex gap-2">
-                              <button onClick={() => handleConfirmTrade(activeChat.id, i, msg.tradeConfirm!.params)}
-                                className="px-4 py-1.5 rounded-lg text-xs font-medium bg-nexus-green hover:bg-nexus-green/85 text-white">
-                                {lang === "zh" ? "确认交易" : "Confirm Trade"}
-                              </button>
-                              <button onClick={() => {
-                                setChatThreads(prev => prev.map(c => {
-                                  if (c.id !== activeChat.id) return c;
-                                  const msgs = [...c.messages];
-                                  msgs[i] = { ...msgs[i], tradeConfirm: undefined, text: msgs[i].text + `\n\n${lang === "zh" ? "已取消" : "Cancelled"}` };
-                                  return { ...c, messages: msgs };
-                                }));
-                              }} className="px-4 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-nexus-muted hover:text-white">
-                                {lang === "zh" ? "取消" : "Cancel"}
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}
