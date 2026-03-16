@@ -6,6 +6,7 @@ import {
   createWallet, confirmWallet, unlockWallet,
   getWalletAddress as getWalletAddr, getWalletStats,
   generateBindCode, verifyBindCode,
+  generateLaunchPlan,
 } from "shared";
 import { createWalletClient, createPublicClient, http, encodeFunctionData, parseUnits, formatUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -325,17 +326,20 @@ Rules:
 - For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
 - For "gas", "手续费" → trade/gas
 - For "portfolio risk", "持仓风险" → risk/portfolio
+- For "launch", "deploy", "create token", "发币", "发射", "创建代币", "上线代币" → use agent "launch", method POST, path "/launch", body {name, symbol, totalSupply, okbForLiquidity}. Extract token name/symbol/supply from user message. Default: 1B supply, 0.1 OKB liquidity.
 - Default chain: xlayer.
 - Max 3 calls. If user wants comprehensive view, combine risk + analyst.
 
 Return ONLY valid JSON:
-{"calls":[{"agent":"signal"|"analyst"|"risk"|"trader","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
+{"calls":[{"agent":"signal"|"analyst"|"risk"|"trader"|"launch","method":"GET"|"POST","path":"/the/path/{token}","tokens":["symbol or address mentioned"],"body":null|{...},"description":"what this call does"}],"reply":"brief explanation of what you're doing"}`;
 
+const GATEWAY_SELF = `http://localhost:${PORT}`;
 const AGENT_ENDPOINTS: Record<string, string> = {
   signal: SIGNAL_URL,
   analyst: ANALYST_URL,
   risk: RISK_URL,
   trader: TRADER_URL,
+  launch: GATEWAY_SELF,
 };
 
 // User wallet address — also creates if doesn't exist
@@ -561,8 +565,28 @@ app.get("/wallet-stats", (_req, res) => {
   res.json(getWalletStats());
 });
 
+// ── Token Launch: generate deploy + pool creation transactions ──
+app.post("/launch", async (req, res) => {
+  const { name, symbol, totalSupply, okbForLiquidity, from } = req.body;
+  if (!name || !symbol || !from) {
+    return res.status(400).json({ error: "name, symbol, from required" });
+  }
+  try {
+    const plan = await generateLaunchPlan({
+      name,
+      symbol,
+      totalSupply: totalSupply || "1000000000",
+      okbForLiquidity: okbForLiquidity || "0.1",
+      from,
+    });
+    res.json(plan);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/chat", async (req, res) => {
-  const { message, chain, platform, user_id } = req.body;
+  const { message, chain, platform, user_id, wallet_address } = req.body;
   const targetChain = chain || "xlayer";
 
   if (!message || typeof message !== "string") {
@@ -652,6 +676,11 @@ app.post("/chat", async (req, res) => {
                 (body as any)[k] = resolvedTokens[v];
               }
             }
+          }
+
+          // Launch: inject user wallet address into body
+          if (call.agent === "launch") {
+            body = { ...(body || {}), from: (req.body as any).wallet_address || userWalletAddress || "0x0000000000000000000000000000000000000000" };
           }
 
           // Trade execution requires password — return preview instead

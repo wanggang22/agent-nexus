@@ -61,6 +61,12 @@ const LANG: Record<string, Record<string, string>> = {
     liquidity: "Liquidity", tax: "Tax", level: "Level",
     price: "Price", mcap: "MCap", vol: "Vol", change24h: "24h",
     wallets: "Wallets", amount: "Amount", score: "Score",
+    launchToken: "Launch Token", tokenName: "Token Name", tokenSymbol: "Token Symbol",
+    totalSupply: "Total Supply", okbLiquidity: "OKB for Liquidity",
+    launchDesc: "Deploy your meme coin on X Layer with one click",
+    launching: "Launching...", launchStep: "Step", of: "of",
+    launchSuccess: "Token launched!", viewExplorer: "View on Explorer",
+    needOKXWallet: "Connect OKX Wallet to launch",
   },
   zh: {
     hotTokens: "热门代币", smartMoney: "聪明钱", whaleAlerts: "鲸鱼监控",
@@ -105,6 +111,12 @@ const LANG: Record<string, Record<string, string>> = {
     liquidity: "流动性", tax: "税", level: "等级",
     price: "价格", mcap: "市值", vol: "成交量", change24h: "24h涨跌",
     wallets: "钱包数", amount: "金额", score: "评分",
+    launchToken: "发射代币", tokenName: "代币名称", tokenSymbol: "代币符号",
+    totalSupply: "总供应量", okbLiquidity: "OKB 流动性",
+    launchDesc: "一键在 X Layer 上发射你的 Meme 币",
+    launching: "发射中...", launchStep: "第", of: "步，共",
+    launchSuccess: "代币发射成功！", viewExplorer: "在浏览器中查看",
+    needOKXWallet: "请连接 OKX 钱包以发射代币",
   },
 };
 
@@ -203,6 +215,16 @@ export default function Dashboard() {
   });
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+
+  // ── Token Launch ──
+  const [launchName, setLaunchName] = useState("");
+  const [launchSymbol, setLaunchSymbol] = useState("");
+  const [launchSupply, setLaunchSupply] = useState("1000000000");
+  const [launchOKB, setLaunchOKB] = useState("0.1");
+  const [launchStep, setLaunchStep] = useState(0);
+  const [launchTotal, setLaunchTotal] = useState(0);
+  const [launchLoading, setLaunchLoading] = useState(false);
+  const [launchResult, setLaunchResult] = useState<{ address: string; txHash?: string } | null>(null);
 
   // ── Token Data (on-chain data for current token) ──
   const [tokenData, setTokenData] = useState<any>(null);
@@ -382,6 +404,70 @@ export default function Dashboard() {
       setTokenDataLoading(false);
     }
   }, []);
+
+  // ── Launch token handler ──
+  const handleLaunch = async () => {
+    if (!launchName || !launchSymbol) return;
+    if (walletMode !== "okx" || !wallet) {
+      alert(t.needOKXWallet);
+      return;
+    }
+    setLaunchLoading(true);
+    setLaunchResult(null);
+    setLaunchStep(0);
+    try {
+      // 1. Get launch plan from gateway
+      const resp = await fetch(`${GATEWAY}/launch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: launchName, symbol: launchSymbol, totalSupply: launchSupply, okbForLiquidity: launchOKB, from: wallet }),
+      });
+      const plan = await resp.json();
+      if (plan.error) throw new Error(plan.error);
+
+      setLaunchTotal(plan.transactions.length);
+      const provider = (window as any).okxwallet;
+      if (!provider) throw new Error("OKX Wallet not found");
+
+      let deployedAddress = plan.predictedAddress;
+
+      // 2. Execute each transaction in order
+      for (let i = 0; i < plan.transactions.length; i++) {
+        setLaunchStep(i + 1);
+        const { tx, step } = plan.transactions[i];
+        const txParams: any = { from: wallet, data: tx.data, value: tx.value, chainId: tx.chainId };
+
+        if (step === "deploy") {
+          // Contract creation — no 'to'
+        } else {
+          txParams.to = tx.to;
+        }
+
+        const txHash = await provider.request({ method: "eth_sendTransaction", params: [txParams] });
+
+        // Wait for confirmation
+        let confirmed = false;
+        for (let j = 0; j < 30; j++) {
+          await new Promise(r => setTimeout(r, 2000));
+          const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
+          if (receipt) {
+            if (step === "deploy" && receipt.contractAddress) {
+              deployedAddress = receipt.contractAddress;
+            }
+            confirmed = true;
+            break;
+          }
+        }
+        if (!confirmed) throw new Error(`Transaction ${step} timed out`);
+      }
+
+      setLaunchResult({ address: deployedAddress });
+    } catch (e: any) {
+      alert(`Launch failed: ${e.message}`);
+    } finally {
+      setLaunchLoading(false);
+    }
+  };
 
   // Load token data when switching to a token view
   useEffect(() => {
@@ -723,6 +809,16 @@ export default function Dashboard() {
           >
             <IconChart />
             {sidebarOpen && <span>{t.overview}</span>}
+          </button>
+
+          <button
+            onClick={() => setActiveView("launch")}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
+              activeView === "launch" ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            {sidebarOpen && <span>{t.launchToken}</span>}
           </button>
 
           <button
@@ -1131,6 +1227,89 @@ export default function Dashboard() {
         )}
 
         {/* ── WALLET VIEW ── */}
+        {activeView === "launch" && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <h1 className="text-xl font-bold text-white mb-2">{t.launchToken}</h1>
+            <p className="text-nexus-muted text-sm mb-6">{t.launchDesc}</p>
+
+            <div className="max-w-lg space-y-4">
+              {walletMode !== "okx" || !wallet ? (
+                <div className="card text-center py-8">
+                  <svg className="mx-auto mb-3 w-12 h-12 text-nexus-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 19V5M5 12l7-7 7 7"/>
+                  </svg>
+                  <p className="text-nexus-muted mb-4">{t.needOKXWallet}</p>
+                  <button onClick={handleConnectOKX} className="btn-primary px-6 py-2">{t.connectOKX}</button>
+                </div>
+              ) : launchResult ? (
+                <div className="card text-center py-8">
+                  <div className="text-4xl mb-3">&#x1F680;</div>
+                  <h2 className="text-lg font-bold text-nexus-green mb-2">{t.launchSuccess}</h2>
+                  <p className="text-sm text-nexus-muted mb-1">{launchSymbol}</p>
+                  <p className="font-mono text-xs text-nexus-accent-light break-all mb-4">{launchResult.address}</p>
+                  <div className="flex gap-3 justify-center">
+                    <a href={`https://www.okx.com/web3/explorer/xlayer/address/${launchResult.address}`}
+                       target="_blank" rel="noreferrer"
+                       className="btn-primary px-4 py-2 text-sm">{t.viewExplorer}</a>
+                    <button onClick={() => { setLaunchResult(null); setLaunchName(""); setLaunchSymbol(""); }}
+                            className="btn-outline px-4 py-2 text-sm">{t.launchToken}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="card space-y-4">
+                    <div>
+                      <label className="block text-xs text-nexus-muted mb-1">{t.tokenName}</label>
+                      <input type="text" className="input w-full" placeholder="e.g. Moon Dog"
+                             value={launchName} onChange={e => setLaunchName(e.target.value)} disabled={launchLoading} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-nexus-muted mb-1">{t.tokenSymbol}</label>
+                      <input type="text" className="input w-full" placeholder="e.g. MDOG"
+                             value={launchSymbol} onChange={e => setLaunchSymbol(e.target.value.toUpperCase())} disabled={launchLoading} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-nexus-muted mb-1">{t.totalSupply}</label>
+                        <input type="text" className="input w-full" placeholder="1000000000"
+                               value={launchSupply} onChange={e => setLaunchSupply(e.target.value)} disabled={launchLoading} />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-nexus-muted mb-1">{t.okbLiquidity}</label>
+                        <input type="text" className="input w-full" placeholder="0.1"
+                               value={launchOKB} onChange={e => setLaunchOKB(e.target.value)} disabled={launchLoading} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card text-xs text-nexus-muted space-y-1">
+                    <div className="flex justify-between"><span>Network</span><span className="text-white">X Layer</span></div>
+                    <div className="flex justify-between"><span>DEX Pool</span><span className="text-white">Uniswap V3 (1% fee)</span></div>
+                    <div className="flex justify-between"><span>Pair</span><span className="text-white">{launchSymbol || "TOKEN"}/WOKB</span></div>
+                    <div className="flex justify-between"><span>LP Range</span><span className="text-white">Full Range</span></div>
+                    <div className="flex justify-between"><span>Decimals</span><span className="text-white">18</span></div>
+                  </div>
+
+                  {launchLoading ? (
+                    <div className="card text-center py-4">
+                      <div className="animate-spin w-6 h-6 border-2 border-nexus-accent border-t-transparent rounded-full mx-auto mb-2" />
+                      <p className="text-sm text-nexus-accent-light">
+                        {t.launchStep} {launchStep} {t.of} {launchTotal}
+                      </p>
+                    </div>
+                  ) : (
+                    <button onClick={handleLaunch}
+                            disabled={!launchName || !launchSymbol}
+                            className="btn-primary w-full py-3 text-sm font-semibold disabled:opacity-40">
+                      {t.launchToken} &#x1F680;
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeView === "wallet" && (
           <div className="flex-1 overflow-y-auto p-6">
             <h1 className="text-xl font-bold text-white mb-6">{t.wallet}</h1>
