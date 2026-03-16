@@ -1,222 +1,129 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
-import { useEffect, useState, useRef, useCallback } from "react";
-import {
-  createLocalWallet, saveWallet, getLocalWallet,
-  unlockLocalWallet, signTransaction, importWallet,
-  syncToServer, syncFromServer,
-} from "./wallet";
-import {
-  connectOKXWallet, disconnectOKXWallet, sendOKXTransaction,
-} from "./okx-wallet";
-import {
-  getUSDCBalance, getUSDCAllowance, buildApproveTransaction, DEFAULT_APPROVE_AMOUNT,
-} from "./usdc";
+import { useEffect, useState, useRef } from "react";
+import { connectOKXWallet, sendOKXTransaction } from "./okx-wallet";
 
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
 // ── i18n ──
 const LANG: Record<string, Record<string, string>> = {
   en: {
-    hotTokens: "Hot Tokens", smartMoney: "Smart Money", whaleAlerts: "Whale Alerts",
-    memeScanner: "Meme Scanner", search: "Search", overview: "Overview", wallet: "Wallet",
-    market: "MARKET", tools: "TOOLS", tokenChats: "TOKEN CHATS",
-    refresh: "Refresh", disconnect: "Disconnect", logout: "Logout",
-    connectOKX: "Connect OKX Wallet", createLocal: "Create Local Wallet",
-    importKey: "Import Private Key", unlockWallet: "Unlock Wallet",
-    setPassword: "Set Password", unlock: "Unlock", cancel: "Cancel",
-    approve: "Approve", approving: "Approving...",
-    hotDesc: "Trending tokens by volume & mentions",
-    smartDesc: "What smart money wallets are buying",
-    whaleDesc: "Large transactions (>$10k)",
-    memeDesc: "New meme tokens launching", searchDesc: "Find any token",
-    analyzeWith: "Analyze with AI", refreshData: "Refresh Data",
-    aiChat: "AI Strategy Chat", askAbout: "Ask about",
-    noData: "No data for", tryChain: "Try another chain.",
-    loading: "Loading", connecting: "Connecting...",
-    totalCalls: "Total Calls", revenue: "Revenue",
-    walletPnl: "Wallet PnL", totalPnl: "Total PnL",
-    unrealized: "Unrealized", winRate: "Win Rate", trades: "Trades",
-    usdcBalance: "USDC Balance", approved: "Approved", costPerCall: "Cost per call",
-    autoPayment: "Auto-payment enabled · No confirmation needed",
-    approveOnce: "Approve once → all AI analysis auto-deduct",
-    unlockFirst: "Unlock wallet first",
-    saveKey: "Save Your Private Key", savedKey: "I have saved my private key",
-    continue: "Continue", signIn: "Sign In",
-    heroTitle1: "AI-Powered", heroTitle2: "On-Chain Strategy.",
-    heroDesc: "Real-time on-chain data meets AI analysis. Build trading strategies per token, track smart money, and execute — all with natural language.",
-    getStarted: "Get Started", loginX: "Login with X",
-    feat1: "Hot Meme Feed", feat1d: "Real-time trending tokens, smart money signals, and meme scanner powered by OnchainOS.",
-    feat2: "Per-Token AI Chat", feat2d: "Each token gets its own AI context. Build analysis logic and buy/sell strategies through conversation.",
-    feat3: "Full On-Chain Intel", feat3d: "39 OnchainOS commands: holder analysis, whale tracking, bundle detection, PnL, and more.",
-    okxWalletConnected: "OKX Wallet Connected", locked: "Locked", unlocked: "Unlocked",
-    keyEncrypted: "Key encrypted in browser", okxGas: "0 Gas x402 · OKX Wallet",
-    analyze: "Analyze", askAI: "analysis, strategies, buy/sell signals",
-    quickBuy: "Buy timing", quickSafe: "safe to buy?", quickDeep: "Deep analysis",
-    quickSmart: "Smart money buying?", quickStop: "Stop-loss strategy", quickCompare: "Compare similar",
-    technical: "TECHNICAL", fundamental: "FUNDAMENTAL", riskAssessment: "RISK ASSESSMENT",
-    memeIntel: "MEME INTEL", signal: "Signal",
-    trend: "Trend", volume: "Volume", honeypot: "Honeypot", holders: "Holders",
-    liquidity: "Liquidity", tax: "Tax", level: "Level",
-    price: "Price", mcap: "MCap", vol: "Vol", change24h: "24h",
-    wallets: "Wallets", amount: "Amount", score: "Score",
+    newChat: "New Chat", chats: "CHATS", launch: "LAUNCH", strategies: "STRATEGIES",
+    wallet: "Wallet", connectOKX: "Connect OKX Wallet", disconnect: "Disconnect",
+    logout: "Logout", settings: "Settings",
+    placeholder: "Ask anything about tokens, trading, analysis...",
     launchToken: "Launch Token", tokenName: "Token Name", tokenSymbol: "Token Symbol",
     totalSupply: "Total Supply", okbLiquidity: "OKB for Liquidity",
-    launchDesc: "Deploy your meme coin on X Layer with one click",
-    launching: "Launching...", launchStep: "Step", of: "of",
-    launchSuccess: "Token launched!", viewExplorer: "View on Explorer",
-    needOKXWallet: "Connect OKX Wallet to launch",
+    launchDesc: "Deploy your meme coin on X Layer — Uniswap V3 pool, instant trading",
+    launching: "Launching...", step: "Step", of: "of",
+    launchSuccess: "Token launched!", viewExplorer: "View on Explorer", launchAnother: "Launch Another",
+    needOKXWallet: "Connect OKX Wallet to launch tokens",
+    newStrategy: "New Strategy", strategyName: "Strategy Name",
+    strategyDesc: "Describe your filter in natural language",
+    saveStrategy: "Save & Run", running: "Running", paused: "Paused", runNow: "Run Now",
+    deleteStrategy: "Delete", noStrategies: "No strategies yet",
+    heroTitle: "AgentNexus", heroSub: "AI-powered on-chain strategy for X Layer",
+    heroDesc: "Chat with AI to analyze tokens, execute trades, launch meme coins, and build automated strategies — all with natural language.",
+    connectToStart: "Connect wallet to start",
+    loginX: "Login with X", freeCredits: "free today", credits: "credits",
+    thinking: "Thinking...",
+    paymentRequired: "Credits Depleted",
+    paymentDesc: "You've used all 10 free daily actions. Purchase credits to continue.",
+    buyCredits: "Buy 100 Credits ($1 USDC)",
+    buying: "Processing...",
+    paymentSuccess: "Credits purchased!",
+    freeActions: "free actions left",
+    creditsLeft: "credits",
   },
   zh: {
-    hotTokens: "热门代币", smartMoney: "聪明钱", whaleAlerts: "鲸鱼监控",
-    memeScanner: "Meme扫描", search: "搜索", overview: "总览", wallet: "钱包",
-    market: "市场", tools: "工具", tokenChats: "代币对话",
-    refresh: "刷新", disconnect: "断开", logout: "退出",
-    connectOKX: "连接 OKX 钱包", createLocal: "创建本地钱包",
-    importKey: "导入私钥", unlockWallet: "解锁钱包",
-    setPassword: "设置密码", unlock: "解锁", cancel: "取消",
-    approve: "授权", approving: "授权中...",
-    hotDesc: "按交易量和热度排名的代币",
-    smartDesc: "聪明钱钱包正在买什么",
-    whaleDesc: "大额交易 (>$10k)",
-    memeDesc: "新上线的 Meme 代币", searchDesc: "搜索任意代币",
-    analyzeWith: "AI 分析", refreshData: "刷新数据",
-    aiChat: "AI 策略聊天", askAbout: "询问",
-    noData: "暂无数据", tryChain: "试试其他链",
-    loading: "加载中", connecting: "连接中...",
-    totalCalls: "总调用数", revenue: "收入",
-    walletPnl: "钱包盈亏", totalPnl: "总盈亏",
-    unrealized: "未实现", winRate: "胜率", trades: "交易数",
-    usdcBalance: "USDC 余额", approved: "已授权", costPerCall: "单次费用",
-    autoPayment: "自动扣款已开启 · 无需确认",
-    approveOnce: "授权一次 → AI分析自动扣款",
-    unlockFirst: "请先解锁钱包",
-    saveKey: "保存你的私钥", savedKey: "我已安全保存私钥",
-    continue: "继续", signIn: "登录",
-    heroTitle1: "AI 驱动的", heroTitle2: "链上策略平台",
-    heroDesc: "实时链上数据 + AI 分析。逐币构建交易策略，追踪聪明钱，自然语言执行交易。",
-    getStarted: "开始使用", loginX: "X 登录",
-    feat1: "热点 Meme", feat1d: "OnchainOS 驱动的实时热门代币、聪明钱信号和 Meme 扫描。",
-    feat2: "逐币 AI 对话", feat2d: "每个代币独立 AI 上下文，通过对话构建分析逻辑和买卖策略。",
-    feat3: "全链上情报", feat3d: "39 个 OnchainOS 命令：持仓分析、鲸鱼追踪、捆绑检测、盈亏等。",
-    okxWalletConnected: "OKX 钱包已连接", locked: "已锁定", unlocked: "已解锁",
-    keyEncrypted: "私钥在浏览器中加密", okxGas: "0 Gas x402 · OKX 钱包",
-    analyze: "分析", askAI: "分析、策略、买卖信号",
-    quickBuy: "买入时机", quickSafe: "安全吗？", quickDeep: "深度分析",
-    quickSmart: "聪明钱在买吗？", quickStop: "止损策略", quickCompare: "同类对比",
-    technical: "技术面", fundamental: "基本面", riskAssessment: "风险评估",
-    memeIntel: "MEME 情报", signal: "信号",
-    trend: "趋势", volume: "成交量", honeypot: "蜜罐", holders: "持仓",
-    liquidity: "流动性", tax: "税", level: "等级",
-    price: "价格", mcap: "市值", vol: "成交量", change24h: "24h涨跌",
-    wallets: "钱包数", amount: "金额", score: "评分",
+    newChat: "新对话", chats: "对话", launch: "发币", strategies: "策略",
+    wallet: "钱包", connectOKX: "连接 OKX 钱包", disconnect: "断开",
+    logout: "退出", settings: "设置",
+    placeholder: "问任何关于代币、交易、分析的问题...",
     launchToken: "发射代币", tokenName: "代币名称", tokenSymbol: "代币符号",
     totalSupply: "总供应量", okbLiquidity: "OKB 流动性",
-    launchDesc: "一键在 X Layer 上发射你的 Meme 币",
-    launching: "发射中...", launchStep: "第", of: "步，共",
-    launchSuccess: "代币发射成功！", viewExplorer: "在浏览器中查看",
+    launchDesc: "在 X Layer 上发射你的 Meme 币 — Uniswap V3 池，即刻交易",
+    launching: "发射中...", step: "第", of: "步，共",
+    launchSuccess: "代币发射成功！", viewExplorer: "在浏览器中查看", launchAnother: "继续发射",
     needOKXWallet: "请连接 OKX 钱包以发射代币",
+    newStrategy: "新策略", strategyName: "策略名称",
+    strategyDesc: "用自然语言描述你的筛选条件",
+    saveStrategy: "保存并执行", running: "运行中", paused: "已暂停", runNow: "立即执行",
+    deleteStrategy: "删除", noStrategies: "暂无策略",
+    heroTitle: "AgentNexus", heroSub: "X Layer AI 链上策略助手",
+    heroDesc: "用自然语言和 AI 聊天，分析代币、执行交易、发射 Meme 币、构建自动化策略。",
+    connectToStart: "连接钱包开始使用",
+    loginX: "X 登录", freeCredits: "今日免费", credits: "额度",
+    thinking: "思考中...",
+    paymentRequired: "额度已用完",
+    paymentDesc: "今日10次免费操作已用完，购买额度以继续使用。",
+    buyCredits: "购买100次额度 ($1 USDC)",
+    buying: "处理中...",
+    paymentSuccess: "额度购买成功！",
+    freeActions: "次免费剩余",
+    creditsLeft: "额度",
   },
 };
 
-// ── Types ──
-interface TokenChat {
-  symbol: string;
-  address: string;
-  history: Array<{ role: string; text: string }>;
-}
-
 // ── Icons ──
-const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+const Icon = ({ d, cls = "w-5 h-5" }: { d: string; cls?: string }) => (
+  <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d={d} />
   </svg>
 );
-const IconFire = () => <Icon d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />;
-const IconChat = () => <Icon d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />;
-const IconWallet = () => <Icon d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1 0-6h5.25A2.25 2.25 0 0 1 21 6v6zm0 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18V6a2.25 2.25 0 0 1 2.25-2.25h13.5" />;
-const IconChart = () => <Icon d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />;
-const IconPlus = () => <Icon d="M12 4.5v15m7.5-7.5h-15" />;
-const IconSend = () => (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-  </svg>
-);
-const IconShield = () => <Icon d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />;
-const IconX = () => (
-  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-  </svg>
-);
+
+// ── Types ──
+interface ChatThread { id: string; title: string; messages: { role: "user" | "ai"; text: string }[]; createdAt: number }
+interface LaunchRecord { id: string; name: string; symbol: string; address?: string; status: "draft" | "launching" | "live"; createdAt: number }
+interface Strategy { id: string; name: string; description: string; status: "running" | "paused"; results: string[]; createdAt: number }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const twitterId = (session as any)?.twitterId;
   const twitterUsername = (session as any)?.twitterUsername;
 
-  // ── Wallet State ──
+  // ── Core state ──
   const [wallet, setWallet] = useState<string | null>(null);
-  const [walletMode, setWalletMode] = useState<"local" | "okx" | null>(null);
-  const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState("");
-  const [passwordMode, setPasswordMode] = useState<"set" | "unlock" | "import" | null>(null);
-  const [backupKey, setBackupKey] = useState<string | null>(null);
-  const [backupConfirmed, setBackupConfirmed] = useState(false);
-  const [importKey, setImportKey] = useState("");
-  const privateKeyRef = useRef<string | null>(null);
-
-  // ── USDC Approval State ──
-  const [usdcBalance, setUsdcBalance] = useState<string>("0");
-  const [usdcAllowance, setUsdcAllowance] = useState<string>("0");
-  const [platformWallet, setPlatformWallet] = useState<string>("");
-  const [approving, setApproving] = useState(false);
-
-  // ── Language ──
+  const [walletMode, setWalletMode] = useState<"okx" | "twitter" | null>(null);
   const [lang, setLang] = useState<"en" | "zh">(() => {
     if (typeof window === "undefined") return "zh";
     return (localStorage.getItem("agentnexus_lang") as "en" | "zh") || "zh";
   });
   const t = LANG[lang];
-  const toggleLang = () => {
-    const next = lang === "en" ? "zh" : "en";
-    setLang(next);
-    localStorage.setItem("agentnexus_lang", next);
-  };
+  const toggleLang = () => { const n = lang === "en" ? "zh" : "en"; setLang(n); localStorage.setItem("agentnexus_lang", n); };
 
-  // ── Navigation State ──
-  const [activeView, setActiveView] = useState<string>("hot"); // "hot", "smart", "whale", "meme", "wallet", "overview", "search", or "token:SYMBOL"
+  // ── Navigation ──
+  type View = "chat" | "launch" | "strategy" | "wallet";
+  const [activeView, setActiveView] = useState<View>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [selectedChain, setSelectedChain] = useState("base"); // multi-chain: base has most meme activity
 
-  // ── Market Data ──
-  const [hotTokens, setHotTokens] = useState<any[]>([]);
-  const [smartMoneyData, setSmartMoneyData] = useState<any[]>([]);
-  const [whaleData, setWhaleData] = useState<any[]>([]);
-  const [memeData, setMemeData] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
-
-  // ── Token Chats (per-token conversation context) ──
-  const [tokenChats, setTokenChats] = useState<Map<string, TokenChat>>(() => {
-    if (typeof window === "undefined") return new Map();
-    try {
-      const saved = localStorage.getItem("agentnexus_chats");
-      if (saved) {
-        const arr = JSON.parse(saved);
-        if (Array.isArray(arr)) return new Map(arr);
-      }
-    } catch {
-      // Corrupted data — clear it
-      localStorage.removeItem("agentnexus_chats");
-    }
-    return new Map();
+  // ── Chat state ──
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { const s = localStorage.getItem("nexus_chats"); return s ? JSON.parse(s) : []; } catch { return []; }
   });
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ── Token Launch ──
+  const activeChat = chatThreads.find(c => c.id === activeChatId) || null;
+
+  // Persist chats
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("nexus_chats", JSON.stringify(chatThreads));
+  }, [chatThreads]);
+
+  // Auto-scroll
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeChat?.messages.length]);
+
+  // ── Launch state ──
+  const [launches, setLaunches] = useState<LaunchRecord[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { const s = localStorage.getItem("nexus_launches"); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  const [activeLaunchId, setActiveLaunchId] = useState<string | null>(null);
   const [launchName, setLaunchName] = useState("");
   const [launchSymbol, setLaunchSymbol] = useState("");
   const [launchSupply, setLaunchSupply] = useState("1000000000");
@@ -224,204 +131,218 @@ export default function Dashboard() {
   const [launchStep, setLaunchStep] = useState(0);
   const [launchTotal, setLaunchTotal] = useState(0);
   const [launchLoading, setLaunchLoading] = useState(false);
-  const [launchResult, setLaunchResult] = useState<{ address: string; txHash?: string } | null>(null);
 
-  // ── Token Data (on-chain data for current token) ──
-  const [tokenData, setTokenData] = useState<any>(null);
-  const [tokenDataLoading, setTokenDataLoading] = useState(false);
-
-  // ── Stats ──
-  const [stats, setStats] = useState<any>(null);
-  const [walletPnL, setWalletPnL] = useState<any>(null);
-
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Auto scroll chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [tokenChats, chatLoading]);
+    if (typeof window !== "undefined") localStorage.setItem("nexus_launches", JSON.stringify(launches));
+  }, [launches]);
 
-  // Persist token chats to localStorage + server
+  const activeLaunch = launches.find(l => l.id === activeLaunchId) || null;
+
+  // ── Strategy state ──
+  const [strategies, setStrategies] = useState<Strategy[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { const s = localStorage.getItem("nexus_strategies"); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  const [activeStrategyId, setActiveStrategyId] = useState<string | null>(null);
+  const [strategyInput, setStrategyInput] = useState("");
+  const [strategyName, setStrategyName] = useState("");
+
   useEffect(() => {
-    try {
-      const arr = Array.from(tokenChats.entries());
-      if (arr.length > 0) {
-        localStorage.setItem("agentnexus_chats", JSON.stringify(arr));
-        // Sync to server (debounced by React batching)
-        if (userId) {
-          fetch(`${GATEWAY}/chats/save`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: userId, chats: arr }),
-          }).catch(() => {});
-        }
-      }
-    } catch {}
-  }, [tokenChats]);
+    if (typeof window !== "undefined") localStorage.setItem("nexus_strategies", JSON.stringify(strategies));
+  }, [strategies]);
 
-  // ── Get current token from activeView ──
-  const currentTokenSymbol = activeView.startsWith("token:") ? activeView.split(":")[1] : null;
-  const currentChat = currentTokenSymbol ? tokenChats.get(currentTokenSymbol) : null;
+  // ── Credits / x402 state ──
+  const [credits, setCredits] = useState(0);
+  const [freeRemaining, setFreeRemaining] = useState(10);
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [pendingRetry, setPendingRetry] = useState<(() => void) | null>(null);
 
-  // ── Load wallet + data ──
-  useEffect(() => {
-    if (!twitterId) return;
-    const local = getLocalWallet();
-    if (local) {
-      setWallet(local.address);
-      setWalletMode("local");
-    } else {
-      syncFromServer(GATEWAY, "twitter", twitterId).then((result) => {
-        if (result) { setWallet(result.address); setWalletMode("local"); }
-      });
-    }
-    fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
-    fetchHotTokens();
-  }, [twitterId]);
-
-
-  // Fetch wallet PnL + USDC info
+  // Fetch credits on wallet connect
   useEffect(() => {
     if (!wallet) return;
-    fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${wallet}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
-    // Fetch USDC balance via multiple methods (fallback chain)
-    fetch(`${GATEWAY}/payment/info`).then(r => r.json()).then(info => {
-      setPlatformWallet(info.platform_wallet || "");
+    fetch(`${GATEWAY}/credits/${wallet}`).then(r => r.json()).then(data => {
+      setCredits(data.credits || 0);
+      setFreeRemaining(data.freeRemaining ?? 10);
     }).catch(() => {});
-
-    // Method 1: Gateway API
-    fetch(`${GATEWAY}/payment/allowance/${wallet}`).then(r => r.json()).then(data => {
-      if (data.balance_usdc) setUsdcBalance(data.balance_usdc);
-      if (data.allowance_usdc) setUsdcAllowance(data.allowance_usdc);
-      if (data.platform_wallet) setPlatformWallet(data.platform_wallet);
-    }).catch(() => {
-      // Method 2: OKX Wallet provider (if extension connected)
-      const okx = (window as any).okxwallet;
-      if (okx) {
-        const usdcContract = "0x74b7f16337b8972027f6196a17a631ac6de26d22";
-        // balanceOf(address) selector = 0x70a08231
-        const data = "0x70a08231000000000000000000000000" + wallet.slice(2).toLowerCase();
-        okx.request({
-          method: "eth_call",
-          params: [{ to: usdcContract, data }, "latest"],
-        }).then((result: string) => {
-          if (result && result !== "0x") {
-            const balance = parseInt(result, 16) / 1e6;
-            setUsdcBalance(balance.toFixed(2));
-          }
-        }).catch(() => {});
-      }
-    });
   }, [wallet]);
 
-  // ── Data fetching (multi-chain) ──
-  const fetchHotTokens = async (chain = selectedChain) => {
-    setDataLoading(true);
-    try {
-      const [hotResp, trendResp] = await Promise.all([
-        fetch(`${GATEWAY}/signals/hot-tokens?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] })),
-        fetch(`${GATEWAY}/signals/trending?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] })),
-      ]);
-      const all = [...(hotResp.signals || []), ...(trendResp.signals || [])];
-      const filtered = dedup(all).filter(t => t.token?.symbol && t.token.symbol !== "N/A");
-      setHotTokens(filtered.slice(0, 30));
-    } catch {} finally { setDataLoading(false); }
+  // Handle 402 Payment Required
+  const handle402 = (data: any, retryFn: () => void) => {
+    setFreeRemaining(0);
+    setCredits(data.creditsRemaining || 0);
+    setPendingRetry(() => retryFn);
+    setShowPayment(true);
   };
 
-  const fetchSmartMoney = async (chain = selectedChain) => {
-    setDataLoading(true);
+  // Buy credits via OKX Wallet USDC transfer
+  const handleBuyCredits = async () => {
+    if (!wallet || walletMode !== "okx") return;
+    setPaymentLoading(true);
     try {
-      const resp = await fetch(`${GATEWAY}/signals/smart-money?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
-      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "UNKNOWN" && s.token.symbol !== "N/A");
-      setSmartMoneyData(filtered.slice(0, 30));
-    } catch {} finally { setDataLoading(false); }
-  };
+      const provider = (window as any).okxwallet;
+      if (!provider) throw new Error("OKX Wallet not found");
 
-  const fetchWhaleAlerts = async (chain = selectedChain) => {
-    setDataLoading(true);
-    try {
-      const resp = await fetch(`${GATEWAY}/signals/whale-alert?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
-      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "N/A");
-      setWhaleData(filtered.slice(0, 30));
-    } catch {} finally { setDataLoading(false); }
-  };
+      // Get platform wallet address
+      const infoResp = await fetch(`${GATEWAY}/credits/${wallet}`);
+      const info = await infoResp.json();
+      const payTo = info.payTo;
 
-  const fetchMemeScanner = async (chain = selectedChain) => {
-    setDataLoading(true);
-    try {
-      const resp = await fetch(`${GATEWAY}/signals/meme-scan?chain=${chain}`).then(r => r.json()).catch(() => ({ signals: [] }));
-      const filtered = (resp.signals || []).filter((s: any) => s.token?.symbol && s.token.symbol !== "N/A");
-      setMemeData(filtered.slice(0, 30));
-    } catch {} finally { setDataLoading(false); }
-  };
+      // Build USDC transfer: $1 = 1000000 (6 decimals)
+      const USDC_ADDRESS = "0x74b7f16337b8972027f6196a17a631ac6de26d22";
+      const transferData = "0xa9059cbb" + // transfer(address,uint256)
+        payTo.slice(2).padStart(64, "0") +
+        BigInt("1000000").toString(16).padStart(64, "0"); // $1 USDC
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setDataLoading(true);
-    try {
-      // Use chat endpoint to search for token
-      const resp = await fetch(`${GATEWAY}/signals/trending?chain=${selectedChain}`).then(r => r.json()).catch(() => ({ signals: [] }));
-      const all = (resp.signals || []).filter((s: any) =>
-        (s.token?.symbol || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.details?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setSearchResults(all);
-    } catch {} finally { setDataLoading(false); }
-  };
+      const txHash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: wallet,
+          to: USDC_ADDRESS,
+          data: transferData,
+          chainId: "0xc4", // 196
+        }],
+      });
 
-  function dedup(tokens: any[]): any[] {
-    const seen = new Set<string>();
-    return tokens.filter(t => {
-      const key = t.token?.symbol || t.token?.address;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
+      // Wait for confirmation
+      let confirmed = false;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
+        if (receipt && receipt.status === "0x1") { confirmed = true; break; }
+        if (receipt && receipt.status === "0x0") throw new Error("Transaction reverted");
+      }
+      if (!confirmed) throw new Error("Transaction timeout");
 
-  // Refetch when chain changes
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    if (activeView === "hot") fetchHotTokens(selectedChain);
-    else if (activeView === "smart") fetchSmartMoney(selectedChain);
-    else if (activeView === "whale") fetchWhaleAlerts(selectedChain);
-    else if (activeView === "meme") fetchMemeScanner(selectedChain);
-  }, [selectedChain]);
+      // Verify on server
+      const verifyResp = await fetch(`${GATEWAY}/credits/purchase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet_address: wallet, tx_hash: txHash }),
+      });
+      const result = await verifyResp.json();
+      if (!result.success) throw new Error(result.error);
 
-  // ── Fetch token on-chain data ──
-  const fetchTokenData = useCallback(async (symbol: string, address?: string) => {
-    setTokenDataLoading(true);
-    try {
-      const tokenId = address || symbol;
-      const [basic, risk] = await Promise.all([
-        fetch(`${GATEWAY}/basic/full/${tokenId}`).then(r => r.json()).catch(() => null),
-        fetch(`${GATEWAY}/risk/token-safety/${tokenId}`).then(r => r.json()).catch(() => null),
-      ]);
-      setTokenData({ basic, risk, symbol, address: tokenId });
-    } catch {
-      setTokenData(null);
+      setCredits(result.totalCredits);
+      setFreeRemaining(0);
+      setShowPayment(false);
+
+      // Retry the original action
+      if (pendingRetry) {
+        setPendingRetry(null);
+        pendingRetry();
+      }
+    } catch (e: any) {
+      alert(`Payment failed: ${e.message}`);
     } finally {
-      setTokenDataLoading(false);
+      setPaymentLoading(false);
     }
-  }, []);
+  };
 
-  // ── Launch token handler ──
-  const handleLaunch = async () => {
-    if (!launchName || !launchSymbol) return;
-    if (walletMode !== "okx" || !wallet) {
-      alert(t.needOKXWallet);
-      return;
+  // ── Auth ──
+  const isLoggedIn = !!session || !!wallet;
+  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+
+  const handleConnectOKX = async () => {
+    const result = await connectOKXWallet();
+    if (result) { setWallet(result.address); setWalletMode("okx"); }
+  };
+
+  // ── Chat handler ──
+  const handleSend = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatLoading(true);
+
+    // Create or update thread
+    let threadId = activeChatId;
+    if (!threadId) {
+      threadId = Date.now().toString();
+      const newThread: ChatThread = { id: threadId, title: msg.slice(0, 30), messages: [], createdAt: Date.now() };
+      setChatThreads(prev => [newThread, ...prev]);
+      setActiveChatId(threadId);
     }
-    setLaunchLoading(true);
-    setLaunchResult(null);
-    setLaunchStep(0);
+
+    // Add user message
+    setChatThreads(prev => prev.map(c =>
+      c.id === threadId ? { ...c, messages: [...c.messages, { role: "user" as const, text: msg }] } : c
+    ));
+
     try {
-      // 1. Get launch plan from gateway
+      const resp = await fetch(`${GATEWAY}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, wallet_address: wallet }),
+      });
+
+      // x402: handle payment required
+      if (resp.status === 402) {
+        const data = await resp.json();
+        handle402(data, () => { setChatInput(msg); handleSend(); });
+        setChatLoading(false);
+        return;
+      }
+
+      const data = await resp.json();
+
+      // Update credits info from response
+      if (data.freeRemaining !== undefined) setFreeRemaining(data.freeRemaining);
+      if (data.credits !== undefined) setCredits(data.credits);
+
+      // Check if it's a launch intent
+      const launchResult = data.results?.find((r: any) => r.data?.transactions);
+      const replyText = launchResult
+        ? `I've prepared a token launch plan. Go to the Launch tab to complete it.`
+        : (data.reply || data.error || "No response");
+
+      setChatThreads(prev => prev.map(c =>
+        c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: replyText }] } : c
+      ));
+    } catch (e: any) {
+      setChatThreads(prev => prev.map(c =>
+        c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: `Error: ${e.message}` }] } : c
+      ));
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const newChat = () => { setActiveChatId(null); setChatInput(""); setActiveView("chat"); };
+
+  const deleteChat = (id: string) => {
+    setChatThreads(prev => prev.filter(c => c.id !== id));
+    if (activeChatId === id) setActiveChatId(null);
+  };
+
+  // ── Launch handler ──
+  const handleLaunch = async () => {
+    if (!launchName || !launchSymbol || !wallet) return;
+    if (walletMode !== "okx") { alert(t.needOKXWallet); return; }
+    setLaunchLoading(true);
+    setLaunchStep(0);
+
+    const launchId = Date.now().toString();
+    const record: LaunchRecord = { id: launchId, name: launchName, symbol: launchSymbol, status: "launching", createdAt: Date.now() };
+    setLaunches(prev => [record, ...prev]);
+    setActiveLaunchId(launchId);
+
+    try {
       const resp = await fetch(`${GATEWAY}/launch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: launchName, symbol: launchSymbol, totalSupply: launchSupply, okbForLiquidity: launchOKB, from: wallet }),
       });
+
+      // x402: handle payment required
+      if (resp.status === 402) {
+        const data = await resp.json();
+        setLaunches(prev => prev.filter(l => l.id !== launchId));
+        handle402(data, handleLaunch);
+        setLaunchLoading(false);
+        return;
+      }
+
       const plan = await resp.json();
       if (plan.error) throw new Error(plan.error);
 
@@ -431,1037 +352,478 @@ export default function Dashboard() {
 
       let deployedAddress = plan.predictedAddress;
 
-      // 2. Execute each transaction in order
       for (let i = 0; i < plan.transactions.length; i++) {
         setLaunchStep(i + 1);
         const { tx, step } = plan.transactions[i];
         const txParams: any = { from: wallet, data: tx.data, value: tx.value, chainId: tx.chainId };
-
-        if (step === "deploy") {
-          // Contract creation — no 'to'
-        } else {
-          txParams.to = tx.to;
-        }
+        if (step !== "deploy") txParams.to = tx.to;
 
         const txHash = await provider.request({ method: "eth_sendTransaction", params: [txParams] });
 
         // Wait for confirmation
-        let confirmed = false;
         for (let j = 0; j < 30; j++) {
           await new Promise(r => setTimeout(r, 2000));
           const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
           if (receipt) {
-            if (step === "deploy" && receipt.contractAddress) {
-              deployedAddress = receipt.contractAddress;
-            }
-            confirmed = true;
+            if (step === "deploy" && receipt.contractAddress) deployedAddress = receipt.contractAddress;
             break;
           }
         }
-        if (!confirmed) throw new Error(`Transaction ${step} timed out`);
       }
 
-      setLaunchResult({ address: deployedAddress });
+      setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, address: deployedAddress, status: "live" as const } : l));
+      setLaunchName(""); setLaunchSymbol("");
     } catch (e: any) {
+      setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, status: "draft" as const } : l));
       alert(`Launch failed: ${e.message}`);
     } finally {
       setLaunchLoading(false);
     }
   };
 
-  // Load token data when switching to a token view
-  useEffect(() => {
-    if (!currentTokenSymbol) return;
-    const chat = tokenChats.get(currentTokenSymbol);
-    if (chat?.address) {
-      fetchTokenData(currentTokenSymbol, chat.address);
-    }
-  }, [currentTokenSymbol, fetchTokenData, tokenChats]);
+  // ── Strategy handler ──
+  const handleCreateStrategy = async () => {
+    if (!strategyName || !strategyInput) return;
+    const id = Date.now().toString();
+    const strategy: Strategy = { id, name: strategyName, description: strategyInput, status: "running", results: [], createdAt: Date.now() };
+    setStrategies(prev => [strategy, ...prev]);
+    setActiveStrategyId(id);
+    setStrategyName(""); setStrategyInput("");
 
-  // ── Open token chat ──
-  const openTokenChat = (symbol: string, address: string) => {
-    if (!tokenChats.has(symbol)) {
-      setTokenChats(prev => {
-        const next = new Map(prev);
-        next.set(symbol, { symbol, address, history: [] });
-        return next;
-      });
-    }
-    setActiveView(`token:${symbol}`);
-  };
-
-  // ── Chat with AI about specific token ──
-  const handleTokenChat = async () => {
-    if (!chatInput.trim() || !currentTokenSymbol || !currentChat) return;
-    const msg = chatInput.trim();
-
-    // Add user message
-    setTokenChats(prev => {
-      const next = new Map(prev);
-      const chat = { ...next.get(currentTokenSymbol)! };
-      chat.history = [...chat.history, { role: "user", text: msg }];
-      next.set(currentTokenSymbol, chat);
-      return next;
-    });
-    setChatInput("");
-    setChatLoading(true);
-
+    // Run immediately
     try {
-      // Prepend token context to the message
-      const contextMsg = `[Context: User is analyzing ${currentTokenSymbol} (${currentChat.address}) on X Layer] ${msg}`;
       const resp = await fetch(`${GATEWAY}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: contextMsg, platform: walletMode === "okx" ? "api" : "twitter", user_id: userId }),
+        body: JSON.stringify({ message: strategyInput, wallet_address: wallet }),
       });
-      let data: any;
-      try {
-        const text = await resp.text();
-        data = JSON.parse(text);
-      } catch (parseErr: any) {
-        data = { reply: lang === "zh" ? "AI 正在处理中，请重试。" : "AI is processing... please try again." };
-      }
-      // Prevent error messages from being stored as chat
-      if (data.reply && data.reply.includes("Expected '")) {
-        data.reply = lang === "zh" ? "AI 返回数据异常，请重试。" : "AI response error, please retry.";
-      }
-
-      // Check for trade
-      const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
-      const replyText = tradeResult
-        ? `${tradeResult.data.summary}\n\n${unlocked ? "Wallet unlocked — ready to execute." : "Unlock wallet to execute."}`
-        : (data.reply || data.error || "No response");
-
-      setTokenChats(prev => {
-        const next = new Map(prev);
-        const chat = { ...next.get(currentTokenSymbol)! };
-        chat.history = [...chat.history, { role: "agent", text: replyText }];
-        next.set(currentTokenSymbol, chat);
-        return next;
-      });
-    } catch (e: any) {
-      setTokenChats(prev => {
-        const next = new Map(prev);
-        const chat = { ...next.get(currentTokenSymbol)! };
-        chat.history = [...chat.history, { role: "agent", text: `Error: ${e.message}` }];
-        next.set(currentTokenSymbol, chat);
-        return next;
-      });
-    } finally {
-      setChatLoading(false);
-    }
+      const data = await resp.json();
+      const result = data.reply || "No results";
+      setStrategies(prev => prev.map(s => s.id === id ? { ...s, results: [result] } : s));
+    } catch {}
   };
 
-  // ── USDC Approve ──
-  const handleApproveUSDC = async () => {
-    if (!wallet || !platformWallet) return;
-    setApproving(true);
-    try {
-      const tx = buildApproveTransaction(platformWallet, DEFAULT_APPROVE_AMOUNT);
-      if (walletMode === "okx") {
-        await sendOKXTransaction(tx);
-      } else if (privateKeyRef.current) {
-        await signTransaction(privateKeyRef.current, tx);
-      } else {
-        alert("Unlock wallet first");
-        setApproving(false);
-        return;
-      }
-      // Refresh allowance
-      const newAllowance = await getUSDCAllowance(wallet, platformWallet);
-      setUsdcAllowance(newAllowance);
-    } catch (e: any) {
-      alert(`Approve failed: ${e.message}`);
-    } finally {
-      setApproving(false);
-    }
+  const toggleStrategy = (id: string) => {
+    setStrategies(prev => prev.map(s => s.id === id ? { ...s, status: s.status === "running" ? "paused" as const : "running" as const } : s));
   };
 
-  // ── Wallet handlers ──
-  const handleConnectOKX = async () => {
-    const result = await connectOKXWallet();
-    if (result) { setWallet(result.address); setWalletMode("okx"); setUnlocked(true); }
-  };
-  const handleCreateWallet = () => {
-    const { address, privateKey } = createLocalWallet();
-    setWallet(address); setWalletMode("local"); setBackupKey(privateKey);
-    privateKeyRef.current = privateKey; setPasswordMode("set");
-  };
-  const handleSetPassword = async () => {
-    if (password.length < 6) { alert("Min 6 chars"); return; }
-    if (!privateKeyRef.current || !wallet) return;
-    const saved = await saveWallet(wallet, privateKeyRef.current, password);
-    if (saved) {
-      await syncToServer(GATEWAY, "twitter", twitterId);
-      setPasswordMode(null); setPassword(""); setUnlocked(true);
-    }
-  };
-  const handleUnlock = async () => {
-    if (password.length < 6) { alert("Min 6 chars"); return; }
-    const result = await unlockLocalWallet(password);
-    if (result) {
-      privateKeyRef.current = result.privateKey;
-      setUnlocked(true); setPasswordMode(null); setPassword("");
-    } else { alert("Wrong password"); }
-  };
-  const handleLock = () => { privateKeyRef.current = null; setUnlocked(false); };
-  const handleImport = async () => {
-    if (password.length < 6 || !importKey.startsWith("0x")) { alert("Invalid input"); return; }
-    const result = await importWallet(importKey, password);
-    if (result) {
-      await syncToServer(GATEWAY, "twitter", twitterId);
-      setWallet(result.address); setWalletMode("local"); privateKeyRef.current = importKey;
-      setUnlocked(true); setPasswordMode(null); setPassword(""); setImportKey("");
-    }
+  const deleteStrategy = (id: string) => {
+    setStrategies(prev => prev.filter(s => s.id !== id));
+    if (activeStrategyId === id) setActiveStrategyId(null);
   };
 
-  const [connectingOKX, setConnectingOKX] = useState(false);
-
-  // OKX Wallet login from landing page (no Twitter needed)
-  const handleOKXLogin = async () => {
-    setConnectingOKX(true);
-    try {
-      const result = await connectOKXWallet();
-      if (result) {
-        setWallet(result.address);
-        setWalletMode("okx");
-        setUnlocked(true);
-        fetch(`${GATEWAY}/stats`).then(r => r.json()).then(setStats).catch(() => {});
-        fetchHotTokens();
-        fetch(`${GATEWAY}/signals/wallet-pnl?wallet=${result.address}`).then(r => r.json()).then(setWalletPnL).catch(() => {});
-      }
-    } finally {
-      setConnectingOKX(false);
-    }
-  };
-
-  // ── Determine if user is logged in ──
-  const isLoggedIn = !!session || !!wallet;
-  const userId = twitterId || (wallet ? `wallet_${wallet.slice(0, 8)}` : null);
-  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
-
-  // Load chat history from server (merge with localStorage)
-  useEffect(() => {
-    if (!userId) return;
-    fetch(`${GATEWAY}/chats/load/${userId}`).then(r => r.json()).then(data => {
-      try {
-        if (data.chats && Array.isArray(data.chats) && data.chats.length > 0) {
-          const serverChats = new Map<string, TokenChat>(data.chats);
-          setTokenChats(prev => {
-            if (prev.size === 0) return serverChats;
-            const merged = new Map(serverChats);
-            for (const [k, v] of prev) merged.set(k, v);
-            return merged;
-          });
-        }
-      } catch {}
-    }).catch(() => {});
-  }, [userId]);
-
-  // ── Loading ──
-  if (status === "loading") {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-nexus-bg">
-        <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin" />
-      </main>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // ██  LOGIN PAGE
-  // ══════════════════════════════════════════════════════════════
+  // ── Landing page (not logged in) ──
   if (!isLoggedIn) {
     return (
-      <main className="min-h-screen bg-nexus-bg relative overflow-hidden">
-        <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-nexus-accent/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full text-center">
+          <h1 className="text-4xl font-bold text-gradient mb-2">{t.heroTitle}</h1>
+          <p className="text-nexus-accent-light text-lg mb-2">{t.heroSub}</p>
+          <p className="text-nexus-muted text-sm mb-8">{t.heroDesc}</p>
 
-        <nav className="relative z-10 flex items-center justify-between max-w-6xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-nexus-accent flex items-center justify-center">
-              <span className="text-white font-bold text-sm">AN</span>
-            </div>
-            <span className="text-white font-semibold text-lg tracking-tight">AgentNexus</span>
-          </div>
-          <button onClick={() => signIn("twitter")} className="text-sm bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-lg border border-white/10 transition-all">
-            Sign In
-          </button>
-        </nav>
-
-        <div className="relative z-10 max-w-6xl mx-auto px-6 pt-16 pb-20">
-          <div className="text-center max-w-3xl mx-auto animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-nexus-accent/10 border border-nexus-accent/20 text-nexus-accent-light text-xs font-medium mb-8">
-              <span className="w-1.5 h-1.5 rounded-full bg-nexus-green animate-pulse" />
-              OnchainOS + Claude AI · X Layer
-            </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-white leading-[1.1] tracking-tight mb-6">
-              {t.heroTitle1}
-              <br />
-              <span className="text-gradient">{t.heroTitle2}</span>
-            </h1>
-            <p className="text-lg md:text-xl text-nexus-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-              {t.heroDesc}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button onClick={handleOKXLogin} disabled={connectingOKX} className="btn-primary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4 disabled:opacity-60">
-                {connectingOKX ? (
-                  <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Connecting...</>
-                ) : (
-                  <><span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center text-xs font-bold">OKX</span> {t.connectOKX}</>
-                )}
-              </button>
-              <button onClick={() => signIn("twitter")} className="btn-secondary inline-flex items-center justify-center gap-2.5 text-base px-8 py-4">
-                <IconX /> {t.loginX}
-              </button>
-            </div>
-            <p className="text-xs text-nexus-muted mt-3">OKX Wallet: 0 Gas USDC transfers + x402 payments</p>
+          <div className="space-y-3">
+            <button onClick={handleConnectOKX} className="btn-primary w-full flex items-center justify-center gap-2">
+              <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
+              {t.connectOKX}
+            </button>
+            <button onClick={() => signIn("twitter")} className="btn-secondary w-full flex items-center justify-center gap-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+              {t.loginX}
+            </button>
           </div>
 
-          {/* Feature Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-16 max-w-4xl mx-auto">
-            {[
-              { icon: <IconFire />, title: t.feat1, desc: t.feat1d },
-              { icon: <IconChat />, title: t.feat2, desc: t.feat2d },
-              { icon: <IconShield />, title: t.feat3, desc: t.feat3d },
-            ].map((f, i) => (
-              <div key={i} className="card group cursor-default">
-                <div className="w-10 h-10 rounded-xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light mb-4">{f.icon}</div>
-                <h3 className="text-white font-semibold mb-2">{f.title}</h3>
-                <p className="text-nexus-muted text-sm leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
+          <div className="mt-6 flex justify-center">
+            <button onClick={toggleLang} className="text-xs text-nexus-muted hover:text-white transition-colors">
+              {lang === "en" ? "中文" : "English"}
+            </button>
           </div>
         </div>
-
-        <footer className="relative z-10 border-t border-nexus-border py-6 text-center text-xs text-nexus-muted">
-          AgentNexus · X Layer AI Agent Hackathon · OnchainOS + Claude AI
-        </footer>
-      </main>
+      </div>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ██  MAIN APP (Sidebar + Content)
-  // ══════════════════════════════════════════════════════════════
-
-  const tokenChatList = Array.from(tokenChats.values());
-
+  // ── Main dashboard ──
   return (
-    <div className="h-screen flex bg-nexus-bg overflow-hidden">
-      {/* ── Private Key Backup Modal ── */}
-      {backupKey && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="card max-w-lg w-full border-nexus-yellow/20">
-            <h2 className="text-lg font-bold text-white mb-3">{t.saveKey}</h2>
-            <p className="text-sm text-gray-400 mb-4">This is the only time it will be shown. Store it safely.</p>
-            <div className="bg-nexus-bg p-3 rounded-xl font-mono text-sm text-nexus-accent-light break-all mb-4 select-all border border-nexus-border">{backupKey}</div>
-            <label className="flex items-center gap-2 text-sm text-gray-300 mb-4 cursor-pointer select-none">
-              <input type="checkbox" checked={backupConfirmed} onChange={e => setBackupConfirmed(e.target.checked)} className="rounded" />
-              {t.savedKey}
-            </label>
-            <button onClick={() => { setBackupKey(null); setBackupConfirmed(false); }}
-              disabled={!backupConfirmed} className="btn-primary w-full disabled:opacity-30">{t.continue}</button>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════ SIDEBAR ══════════ */}
-      <aside className={`${sidebarOpen ? "w-64" : "w-16"} shrink-0 bg-nexus-card border-r border-nexus-border flex flex-col transition-all duration-300 overflow-hidden`}>
-        {/* Logo */}
-        <div className="h-14 flex items-center px-4 border-b border-nexus-border gap-2.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-nexus-accent flex items-center justify-center shrink-0">
-            <span className="text-white font-bold text-xs">AN</span>
-          </div>
-          {sidebarOpen && <span className="text-white font-semibold tracking-tight text-sm">AgentNexus</span>}
+    <div className="h-screen flex bg-nexus-bg">
+      {/* ── Sidebar ── */}
+      <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-nexus-card border-r border-nexus-border transition-all duration-200 flex-shrink-0`}>
+        {/* Header */}
+        <div className="p-3 flex items-center gap-2 border-b border-nexus-border">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 rounded-lg hover:bg-white/5 text-nexus-muted hover:text-white">
+            <Icon d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </button>
+          {sidebarOpen && <span className="text-sm font-bold text-gradient">AgentNexus</span>}
         </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-2">
-          {/* MARKET section */}
-          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-1">{t.market}</div>}
-
-          {[
-            { id: "hot", icon: <IconFire />, label: t.hotTokens, action: () => fetchHotTokens() },
-            { id: "smart", icon: <Icon d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: t.smartMoney, action: () => fetchSmartMoney() },
-            { id: "whale", icon: <Icon d="M20.893 13.393l-1.135-1.135a2.252 2.252 0 0 1-.421-.585l-1.08-2.16a.414.414 0 0 0-.663-.107.827.827 0 0 1-.812.21l-1.273-.363a.89.89 0 0 0-.738 1.595l.587.39c.59.395.674 1.23.172 1.732l-.2.2c-.212.212-.33.498-.33.796v.41c0 .409-.11.809-.32 1.158l-1.315 2.191a2.11 2.11 0 0 1-1.81 1.025 1.055 1.055 0 0 1-1.055-1.055v-1.172c0-.92-.56-1.747-1.414-2.089l-.655-.261a2.25 2.25 0 0 1-1.383-2.46l.007-.042a2.25 2.25 0 0 1 .29-.787l.082-.147a2.25 2.25 0 0 1 3.577-.459M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />, label: t.whaleAlerts, action: () => fetchWhaleAlerts() },
-            { id: "meme", icon: <Icon d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />, label: t.memeScanner, action: () => fetchMemeScanner() },
-            { id: "search", icon: <Icon d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />, label: t.search, action: () => {} },
-          ].map(nav => (
-            <button key={nav.id}
-              onClick={() => { setActiveView(nav.id); nav.action(); }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-                activeView === nav.id ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {nav.icon}
-              {sidebarOpen && <span>{nav.label}</span>}
-            </button>
-          ))}
-
-          {/* TOOLS section */}
-          {sidebarOpen && <div className="px-3 text-[9px] text-nexus-muted uppercase tracking-widest mb-1 mt-4">{t.tools}</div>}
-
-          <button
-            onClick={() => setActiveView("overview")}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-              activeView === "overview" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <IconChart />
-            {sidebarOpen && <span>{t.overview}</span>}
+        {/* New Chat */}
+        <div className="p-2">
+          <button onClick={newChat}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm border border-nexus-border hover:bg-white/5 text-nexus-muted hover:text-white transition-all">
+            <Icon d="M12 4.5v15m7.5-7.5h-15" />
+            {sidebarOpen && <span>{t.newChat}</span>}
           </button>
+        </div>
 
-          <button
-            onClick={() => setActiveView("launch")}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-              activeView === "launch" ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            {sidebarOpen && <span>{t.launchToken}</span>}
-          </button>
-
-          <button
-            onClick={() => setActiveView("wallet")}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-              activeView === "wallet" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <IconWallet />
-            {sidebarOpen && (
-              <div className="flex-1 flex items-center justify-between">
-                <span>{t.wallet}</span>
-                {wallet && (
-                  <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
-                )}
-              </div>
-            )}
-          </button>
-
-          {/* Divider + Token Chats */}
-          {sidebarOpen && tokenChatList.length > 0 && (
-            <>
-              <div className="border-t border-nexus-border my-3" />
-              <div className="px-3 text-[10px] text-nexus-muted uppercase tracking-wider mb-1">Token Chats</div>
-            </>
-          )}
-
-          {tokenChatList.map(chat => (
-            <button
-              key={chat.symbol}
-              onClick={() => setActiveView(`token:${chat.symbol}`)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-                activeView === `token:${chat.symbol}` ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
-              }`}
-            >
-              <IconChat />
+        {/* Nav sections */}
+        <nav className="flex-1 overflow-y-auto px-2 space-y-1">
+          {/* CHATS section */}
+          {sidebarOpen && <div className="px-2 pt-3 pb-1 text-[9px] text-nexus-muted uppercase tracking-widest">{t.chats}</div>}
+          {chatThreads.map(chat => (
+            <button key={chat.id}
+              onClick={() => { setActiveChatId(chat.id); setActiveView("chat"); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all group ${
+                activeChatId === chat.id && activeView === "chat" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+              }`}>
+              <Icon d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
               {sidebarOpen && (
-                <div className="flex-1 flex items-center justify-between min-w-0">
-                  <span className="truncate">{chat.symbol}</span>
-                  <span className="text-[10px] text-nexus-muted">{chat.history.length}</span>
-                </div>
+                <>
+                  <span className="flex-1 text-left truncate">{chat.title}</span>
+                  <span onClick={e => { e.stopPropagation(); deleteChat(chat.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-nexus-muted hover:text-red-400 text-xs">✕</span>
+                </>
               )}
             </button>
           ))}
+
+          {/* LAUNCH section */}
+          {sidebarOpen && <div className="px-2 pt-4 pb-1 text-[9px] text-nexus-muted uppercase tracking-widest">{t.launch}</div>}
+          <button onClick={() => { setActiveLaunchId(null); setActiveView("launch"); }}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+              activeView === "launch" && !activeLaunchId ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}>
+            <Icon d="M12 19V5M5 12l7-7 7 7" />
+            {sidebarOpen && <span>{t.launchToken}</span>}
+          </button>
+          {launches.map(l => (
+            <button key={l.id}
+              onClick={() => { setActiveLaunchId(l.id); setActiveView("launch"); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+                activeLaunchId === l.id && activeView === "launch" ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted hover:text-white hover:bg-white/5"
+              }`}>
+              <span className={`w-2 h-2 rounded-full ${l.status === "live" ? "bg-nexus-green" : l.status === "launching" ? "bg-yellow-400 animate-pulse" : "bg-nexus-muted"}`} />
+              {sidebarOpen && <span className="truncate">{l.symbol}</span>}
+            </button>
+          ))}
+
+          {/* STRATEGIES section */}
+          {sidebarOpen && <div className="px-2 pt-4 pb-1 text-[9px] text-nexus-muted uppercase tracking-widest">{t.strategies}</div>}
+          <button onClick={() => { setActiveStrategyId(null); setActiveView("strategy"); }}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+              activeView === "strategy" && !activeStrategyId ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+            }`}>
+            <Icon d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+            {sidebarOpen && <span>{t.newStrategy}</span>}
+          </button>
+          {strategies.map(s => (
+            <button key={s.id}
+              onClick={() => { setActiveStrategyId(s.id); setActiveView("strategy"); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+                activeStrategyId === s.id && activeView === "strategy" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
+              }`}>
+              <span className={`w-2 h-2 rounded-full ${s.status === "running" ? "bg-nexus-green" : "bg-nexus-muted"}`} />
+              {sidebarOpen && <span className="truncate">{s.name}</span>}
+            </button>
+          ))}
         </nav>
 
-        {/* User */}
-        {/* Language Toggle */}
-        <div className="px-3 py-2 shrink-0">
-          <button onClick={toggleLang}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] bg-nexus-bg border border-nexus-border text-nexus-muted hover:text-white transition-all">
-            {lang === "zh" ? "EN / 中" : "中 / EN"}
-          </button>
-        </div>
-
-        <div className="border-t border-nexus-border p-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-nexus-accent/20 flex items-center justify-center text-nexus-accent-light text-xs shrink-0">
-              {walletMode === "okx" ? "W" : "@"}
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-white truncate">{walletMode === "okx" ? displayName : `@${twitterUsername}`}</div>
-                <button onClick={() => {
-                  if (walletMode === "okx") { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }
-                  else { signOut(); }
-                }} className="text-[10px] text-nexus-muted hover:text-white">
-                  {walletMode === "okx" ? t.disconnect : t.logout}
-                </button>
+        {/* Bottom: wallet + settings */}
+        <div className="p-2 border-t border-nexus-border space-y-1">
+          {wallet ? (
+            <div className="px-3 py-2 rounded-xl bg-white/5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-nexus-green" />
+                {sidebarOpen && (
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-white truncate">{displayName}</div>
+                    <div className="text-[10px] text-nexus-muted">{walletMode === "okx" ? "OKX Wallet" : "X Login"}</div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+              {sidebarOpen && (
+                <>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[10px] text-nexus-accent-light">
+                      {freeRemaining > 0 ? `${freeRemaining} ${t.freeActions}` : `${credits} ${t.creditsLeft}`}
+                    </span>
+                    {freeRemaining === 0 && credits < 5 && (
+                      <button onClick={() => setShowPayment(true)} className="text-[10px] text-nexus-green hover:underline">
+                        {lang === "zh" ? "充值" : "Buy"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-1">
+                    {walletMode === "okx" && (
+                      <button onClick={() => { setWallet(null); setWalletMode(null); }} className="text-[10px] text-nexus-muted hover:text-red-400">{t.disconnect}</button>
+                    )}
+                    {session && (
+                      <button onClick={() => signOut()} className="text-[10px] text-nexus-muted hover:text-red-400">{t.logout}</button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button onClick={handleConnectOKX} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-nexus-muted hover:text-white hover:bg-white/5">
+              <Icon d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1 0-6h5.25A2.25 2.25 0 0 1 21 6v6zm0 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18V6a2.25 2.25 0 0 1 2.25-2.25h13.5" />
+              {sidebarOpen && <span>{t.connectOKX}</span>}
+            </button>
+          )}
+          <button onClick={toggleLang} className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs text-nexus-muted hover:text-white hover:bg-white/5">
+            <Icon d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" cls="w-4 h-4" />
+            {sidebarOpen && <span>{lang === "en" ? "中文" : "English"}</span>}
+          </button>
         </div>
       </aside>
 
-      {/* ══════════ MAIN CONTENT ══════════ */}
-      <main className="flex-1 overflow-hidden flex flex-col">
-
-        {/* ── Chain Selector + Token List (shared by hot/smart/whale/meme) ── */}
-        {["hot", "smart", "whale", "meme", "search"].includes(activeView) && (
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
-              {/* Header with chain selector */}
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-xl font-bold text-white">
-                    {activeView === "hot" ? t.hotTokens : activeView === "smart" ? t.smartMoney : activeView === "whale" ? t.whaleAlerts : activeView === "meme" ? t.memeScanner : t.search}
-                  </h1>
-                  <p className="text-xs text-nexus-muted mt-0.5">
-                    {activeView === "hot" ? t.hotDesc : activeView === "smart" ? t.smartDesc : activeView === "whale" ? t.whaleDesc : activeView === "meme" ? t.memeDesc : t.searchDesc}
-                  </p>
-                </div>
-                <button onClick={() => {
-                  if (activeView === "hot") fetchHotTokens();
-                  else if (activeView === "smart") fetchSmartMoney();
-                  else if (activeView === "whale") fetchWhaleAlerts();
-                  else if (activeView === "meme") fetchMemeScanner();
-                }} className="btn-secondary text-xs py-2 px-4">{t.refresh}</button>
-              </div>
-
-              {/* Chain Tabs */}
-              <div className="flex gap-1 mb-4 bg-nexus-card rounded-xl p-1 border border-nexus-border w-fit">
-                {[
-                  { id: "base", label: "Base" },
-                  { id: "ethereum", label: "ETH" },
-                  { id: "solana", label: "SOL" },
-                  { id: "bsc", label: "BSC" },
-                  { id: "xlayer", label: "X Layer" },
-                ].map(chain => (
-                  <button key={chain.id}
-                    onClick={() => setSelectedChain(chain.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      selectedChain === chain.id ? "bg-nexus-accent text-white" : "text-nexus-muted hover:text-white"
-                    }`}
-                  >{chain.label}</button>
-                ))}
-              </div>
-
-              {/* Search Bar (for search view) */}
-              {activeView === "search" && (
-                <div className="flex gap-2 mb-4">
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleSearch()}
-                    className="input flex-1" placeholder="Token name, symbol, or address..." />
-                  <button onClick={handleSearch} className="btn-primary text-sm px-5">Search</button>
-                </div>
-              )}
-
-              {/* Loading */}
-              {dataLoading && (
-                <div className="text-center py-12">
-                  <div className="w-8 h-8 border-2 border-nexus-accent border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-nexus-muted text-sm">{t.loading} {selectedChain}...</p>
-                </div>
-              )}
-
-              {/* Token Grid */}
-              {!dataLoading && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {(activeView === "hot" ? hotTokens : activeView === "smart" ? smartMoneyData : activeView === "whale" ? whaleData : activeView === "meme" ? memeData : searchResults).map((t, i) => (
-                    <div key={i}
-                      onClick={() => openTokenChat(t.token?.symbol || "UNKNOWN", t.token?.address || "")}
-                      className="card cursor-pointer hover:border-nexus-accent/40 group"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] text-nexus-muted w-5 shrink-0">#{i + 1}</span>
-                          <span className="text-white font-semibold truncate">{t.token?.symbol || "?"}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-border text-nexus-muted shrink-0">{t.token?.chain || selectedChain}</span>
-                        </div>
-                        {t.details?.change_24h && (
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-lg shrink-0 ${
-                            parseFloat(t.details.change_24h) >= 0 ? "text-nexus-green bg-nexus-green/10" : "text-nexus-red bg-nexus-red/10"
-                          }`}>
-                            {parseFloat(t.details.change_24h) >= 0 ? "+" : ""}{parseFloat(t.details.change_24h).toFixed(1)}%
-                          </span>
-                        )}
-                      </div>
-
-                      {t.details?.name && <div className="text-xs text-nexus-muted mb-2 truncate">{t.details.name}</div>}
-
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                        {t.details?.price && <div><span className="text-nexus-muted">{t.price} </span><span className="text-white">${t.details.price}</span></div>}
-                        {t.details?.market_cap && <div><span className="text-nexus-muted">{t.mcap} </span><span className="text-white">${Number(t.details.market_cap).toLocaleString()}</span></div>}
-                        {t.details?.volume_24h && <div><span className="text-nexus-muted">{t.vol} </span><span className="text-white">${Number(t.details.volume_24h).toLocaleString()}</span></div>}
-                        {t.details?.wallet_count && <div><span className="text-nexus-muted">{t.wallets} </span><span className="text-white">{t.details.wallet_count}</span></div>}
-                        {t.details?.amount_usd && <div><span className="text-nexus-muted">{t.amount} </span><span className="text-white">${Number(t.details.amount_usd).toLocaleString()}</span></div>}
-                        {t.details?.holders && <div><span className="text-nexus-muted">{t.holders} </span><span className="text-white">{t.details.holders}</span></div>}
-                        {t.details?.hot_score && <div><span className="text-nexus-muted">{t.score} </span><span className="text-nexus-accent-light">{t.details.hot_score}</span></div>}
-                        {t.details?.sold_ratio_pct && <div><span className="text-nexus-muted">{t.score} </span><span className="text-white">{t.details.sold_ratio_pct}%</span></div>}
-                      </div>
-
-                      {/* Smart money specific */}
-                      {t.type === "smart_money_buy" && t.details?.wallets && (
-                        <div className="mt-2 text-[9px] text-nexus-muted truncate">
-                          {t.wallets}: {(t.details.wallets as string[]).join(", ")}
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex items-center gap-1 text-[10px] text-nexus-accent-light opacity-0 group-hover:opacity-100 transition-opacity">
-                        <IconChat /> {t.analyzeWith}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Empty state */}
-                  {(activeView === "hot" ? hotTokens : activeView === "smart" ? smartMoneyData : activeView === "whale" ? whaleData : activeView === "meme" ? memeData : searchResults).length === 0 && !dataLoading && (
-                    <div className="col-span-full text-center py-16 text-nexus-muted">
-                      <p className="text-sm">{t.noData} <span className="text-white font-medium">{selectedChain}</span>. {t.tryChain}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── TOKEN CHAT VIEW ── */}
-        {currentTokenSymbol && currentChat && (
-          <div className="flex-1 flex overflow-hidden">
-            {/* Token Data Panel */}
-            <div className="w-80 border-r border-nexus-border overflow-y-auto shrink-0 hidden lg:block">
-              <div className="p-4 border-b border-nexus-border">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">{currentTokenSymbol}</h2>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-accent/15 text-nexus-accent-light">{selectedChain}</span>
-                </div>
-                <p className="text-[10px] text-nexus-muted font-mono truncate">{currentChat.address}</p>
-              </div>
-
-              {tokenDataLoading ? (
-                <div className="p-4 text-center text-nexus-muted text-sm">{t.loading}...</div>
-              ) : tokenData?.basic ? (
-                <div className="p-4 space-y-4">
-                  {/* Technical */}
-                  <div>
-                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.technical}</h3>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.trend}</span>
-                        <span className={
-                          tokenData.basic.technical?.trend === "bullish" ? "text-nexus-green" :
-                          tokenData.basic.technical?.trend === "bearish" ? "text-nexus-red" : "text-white"
-                        }>{tokenData.basic.technical?.trend || "—"}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">RSI</span>
-                        <span className="text-white">{tokenData.basic.technical?.rsi_14 || "—"}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.volume}</span>
-                        <span className="text-white">{tokenData.basic.technical?.volume_trend || "—"}</span>
-                      </div>
-                    </div>
+      {/* ── Main content ── */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* ── CHAT VIEW ── */}
+        {activeView === "chat" && (
+          <div className="flex-1 flex flex-col">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto">
+              {!activeChat || activeChat.messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                  <h2 className="text-2xl font-bold text-gradient mb-2">{t.heroTitle}</h2>
+                  <p className="text-nexus-muted text-sm mb-8 max-w-md">{t.heroDesc}</p>
+                  <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
+                    {[
+                      lang === "zh" ? "XDOG 怎么样？" : "How is XDOG doing?",
+                      lang === "zh" ? "帮我找市值低于 10 万的代币" : "Find tokens with mcap under $100k",
+                      lang === "zh" ? "用 0.1 OKB 买 SEED" : "Buy SEED with 0.1 OKB",
+                      lang === "zh" ? "发一个叫 MOON 的币" : "Launch a token called MOON",
+                    ].map((q, i) => (
+                      <button key={i} onClick={() => { setChatInput(q); }}
+                        className="card text-left text-xs text-nexus-muted hover:text-white p-3 !rounded-xl">{q}</button>
+                    ))}
                   </div>
-
-                  {/* Fundamental */}
-                  <div>
-                    <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.fundamental}</h3>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.honeypot}</span>
-                        <span className={tokenData.basic.fundamental?.honeypot ? "text-nexus-red" : "text-nexus-green"}>
-                          {tokenData.basic.fundamental?.honeypot ? "YES" : "No"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.holders}</span>
-                        <span className="text-white">{tokenData.basic.fundamental?.holder_concentration || "—"}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.liquidity}</span>
-                        <span className="text-white">${Number(tokenData.basic.fundamental?.liquidity_usd || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-nexus-muted">{t.tax}</span>
-                        <span className="text-white">B:{tokenData.basic.fundamental?.buy_tax || 0}% S:{tokenData.basic.fundamental?.sell_tax || 0}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Risk */}
-                  {tokenData.risk && (
-                    <div>
-                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.riskAssessment}</h3>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">{t.level}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                            tokenData.risk.risk_level === "low" ? "bg-nexus-green/10 text-nexus-green" :
-                            tokenData.risk.risk_level === "medium" ? "bg-nexus-yellow/10 text-nexus-yellow" :
-                            "bg-nexus-red/10 text-nexus-red"
-                          }`}>{tokenData.risk.risk_level || "—"}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">{t.approved}</span>
-                          <span className={tokenData.risk.approved ? "text-nexus-green" : "text-nexus-red"}>
-                            {tokenData.risk.approved ? "Yes" : "No"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Meme */}
-                  {tokenData.basic.meme && (
-                    <div>
-                      <h3 className="text-[10px] text-nexus-muted uppercase tracking-wider mb-2">{t.memeIntel}</h3>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">{t.smartMoney}</span>
-                          <span className="text-white">{tokenData.basic.meme.smart_money_sentiment || "—"}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-nexus-muted">KOL</span>
-                          <span className="text-white text-[10px]">{tokenData.basic.meme.kol_activity || "—"}</span>
-                        </div>
-                        {tokenData.basic.meme.risk_factors?.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {tokenData.basic.meme.risk_factors.map((r: string, i: number) => (
-                              <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-nexus-red/10 text-nexus-red">{r}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Recommendation */}
-                  {tokenData.basic.recommendation && (
-                    <div className={`p-3 rounded-xl border ${
-                      tokenData.basic.recommendation === "BUY" ? "border-nexus-green/30 bg-nexus-green/5" :
-                      tokenData.basic.recommendation === "SELL" ? "border-nexus-red/30 bg-nexus-red/5" :
-                      tokenData.basic.recommendation === "AVOID" ? "border-nexus-red/30 bg-nexus-red/5" :
-                      "border-nexus-border"
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-nexus-muted">{t.signal}</span>
-                        <span className={`text-sm font-bold ${
-                          tokenData.basic.recommendation === "BUY" ? "text-nexus-green" :
-                          tokenData.basic.recommendation === "SELL" || tokenData.basic.recommendation === "AVOID" ? "text-nexus-red" :
-                          "text-white"
-                        }`}>{tokenData.basic.recommendation}</span>
-                      </div>
-                      <p className="text-[10px] text-nexus-muted mt-1">{tokenData.basic.reasoning}</p>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="p-4 text-center text-nexus-muted text-sm">{t.noData}</div>
-              )}
-            </div>
-
-            {/* Chat Area */}
-            <div className="flex-1 flex flex-col">
-              <div className="h-12 px-5 flex items-center justify-between border-b border-nexus-border shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-semibold text-sm">{currentTokenSymbol}</span>
-                  <span className="text-[10px] text-nexus-muted">{t.aiChat}</span>
-                </div>
-                <button onClick={() => fetchTokenData(currentTokenSymbol, currentChat.address)} className="text-[10px] text-nexus-muted hover:text-white">{t.refreshData}</button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-5 space-y-3">
-                {currentChat.history.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-nexus-accent/10 flex items-center justify-center text-nexus-accent-light"><IconChat /></div>
-                    <div className="text-center">
-                      <p className="text-white font-medium mb-1">{t.analyze} {currentTokenSymbol}</p>
-                      <p className="text-nexus-muted text-xs mb-4">{t.askAI}</p>
-                      <div className="flex flex-wrap gap-2 justify-center max-w-md">
-                        {[
-                          `${t.quickBuy} ${currentTokenSymbol}`,
-                          `${currentTokenSymbol} ${t.quickSafe}`,
-                          `${t.quickDeep} ${currentTokenSymbol}`,
-                          t.quickSmart,
-                          t.quickStop,
-                          t.quickCompare,
-                        ].map((cmd, i) => (
-                          <button key={i} onClick={() => setChatInput(cmd)}
-                            className="text-xs px-3 py-1.5 rounded-lg bg-nexus-card border border-nexus-border text-nexus-muted hover:text-white hover:border-nexus-accent/40 transition-all">
-                            {cmd}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  currentChat.history.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
-                      {msg.role === "agent" && (
-                        <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">AI</div>
-                      )}
+                <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+                  {activeChat.messages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
                         <div className="whitespace-pre-wrap">{msg.text}</div>
                       </div>
                     </div>
-                  ))
-                )}
-                {chatLoading && (
-                  <div className="flex justify-start animate-fade-in">
-                    <div className="w-6 h-6 rounded-lg bg-nexus-accent/15 flex items-center justify-center text-nexus-accent-light text-[10px] font-bold mr-2 mt-1 shrink-0">AI</div>
-                    <div className="chat-agent">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-nexus-accent animate-bounce" style={{ animationDelay: "300ms" }} />
+                  ))}
+                  {chatLoading && (
+                    <div className="flex justify-start">
+                      <div className="chat-agent">
+                        <div className="flex items-center gap-2 text-nexus-muted">
+                          <div className="animate-spin w-4 h-4 border-2 border-nexus-accent border-t-transparent rounded-full" />
+                          {t.thinking}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className="px-5 py-4 border-t border-nexus-border shrink-0">
-                <div className="flex gap-3">
-                  <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && !chatLoading && handleTokenChat()}
-                    className="flex-1 input !rounded-xl" placeholder={`{t.askAbout} ${currentTokenSymbol}...`} disabled={chatLoading} />
-                  <button onClick={handleTokenChat} disabled={chatLoading || !chatInput.trim()}
-                    className="btn-primary !px-4 !py-3 !rounded-xl disabled:opacity-40"><IconSend /></button>
+                  )}
+                  <div ref={chatEndRef} />
                 </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="border-t border-nexus-border p-4">
+              <div className="max-w-3xl mx-auto flex gap-3">
+                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+                  className="flex-1 input !rounded-xl" placeholder={t.placeholder} disabled={chatLoading} />
+                <button onClick={handleSend} disabled={chatLoading || !chatInput.trim()}
+                  className="btn-primary !py-3 !px-4 !rounded-xl disabled:opacity-40">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── WALLET VIEW ── */}
+        {/* ── LAUNCH VIEW ── */}
         {activeView === "launch" && (
           <div className="flex-1 overflow-y-auto p-6">
-            <h1 className="text-xl font-bold text-white mb-2">{t.launchToken}</h1>
-            <p className="text-nexus-muted text-sm mb-6">{t.launchDesc}</p>
-
-            <div className="max-w-lg space-y-4">
-              {walletMode !== "okx" || !wallet ? (
-                <div className="card text-center py-8">
-                  <svg className="mx-auto mb-3 w-12 h-12 text-nexus-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M12 19V5M5 12l7-7 7 7"/>
-                  </svg>
-                  <p className="text-nexus-muted mb-4">{t.needOKXWallet}</p>
-                  <button onClick={handleConnectOKX} className="btn-primary px-6 py-2">{t.connectOKX}</button>
-                </div>
-              ) : launchResult ? (
-                <div className="card text-center py-8">
-                  <div className="text-4xl mb-3">&#x1F680;</div>
-                  <h2 className="text-lg font-bold text-nexus-green mb-2">{t.launchSuccess}</h2>
-                  <p className="text-sm text-nexus-muted mb-1">{launchSymbol}</p>
-                  <p className="font-mono text-xs text-nexus-accent-light break-all mb-4">{launchResult.address}</p>
+            <div className="max-w-lg mx-auto">
+              {activeLaunch?.status === "live" ? (
+                /* Success */
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-4">&#x1F680;</div>
+                  <h2 className="text-xl font-bold text-nexus-green mb-2">{t.launchSuccess}</h2>
+                  <p className="text-lg font-mono text-white mb-1">{activeLaunch.symbol}</p>
+                  <p className="font-mono text-xs text-nexus-accent-light break-all mb-6">{activeLaunch.address}</p>
                   <div className="flex gap-3 justify-center">
-                    <a href={`https://www.okx.com/web3/explorer/xlayer/address/${launchResult.address}`}
-                       target="_blank" rel="noreferrer"
-                       className="btn-primary px-4 py-2 text-sm">{t.viewExplorer}</a>
-                    <button onClick={() => { setLaunchResult(null); setLaunchName(""); setLaunchSymbol(""); }}
-                            className="btn-outline px-4 py-2 text-sm">{t.launchToken}</button>
+                    <a href={`https://www.okx.com/web3/explorer/xlayer/address/${activeLaunch.address}`}
+                       target="_blank" rel="noreferrer" className="btn-primary text-sm">{t.viewExplorer}</a>
+                    <button onClick={() => { setActiveLaunchId(null); setLaunchName(""); setLaunchSymbol(""); }}
+                      className="btn-secondary text-sm">{t.launchAnother}</button>
                   </div>
+                </div>
+              ) : walletMode !== "okx" || !wallet ? (
+                /* Need wallet */
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-4">&#x1F680;</div>
+                  <p className="text-nexus-muted mb-4">{t.needOKXWallet}</p>
+                  <button onClick={handleConnectOKX} className="btn-primary">{t.connectOKX}</button>
                 </div>
               ) : (
+                /* Launch form */
                 <>
-                  <div className="card space-y-4">
-                    <div>
-                      <label className="block text-xs text-nexus-muted mb-1">{t.tokenName}</label>
-                      <input type="text" className="input w-full" placeholder="e.g. Moon Dog"
-                             value={launchName} onChange={e => setLaunchName(e.target.value)} disabled={launchLoading} />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-nexus-muted mb-1">{t.tokenSymbol}</label>
-                      <input type="text" className="input w-full" placeholder="e.g. MDOG"
-                             value={launchSymbol} onChange={e => setLaunchSymbol(e.target.value.toUpperCase())} disabled={launchLoading} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
+                  <h1 className="text-xl font-bold text-white mb-1">{t.launchToken}</h1>
+                  <p className="text-nexus-muted text-sm mb-6">{t.launchDesc}</p>
+
+                  <div className="space-y-4">
+                    <div className="card space-y-4">
                       <div>
-                        <label className="block text-xs text-nexus-muted mb-1">{t.totalSupply}</label>
-                        <input type="text" className="input w-full" placeholder="1000000000"
-                               value={launchSupply} onChange={e => setLaunchSupply(e.target.value)} disabled={launchLoading} />
+                        <label className="block text-xs text-nexus-muted mb-1">{t.tokenName}</label>
+                        <input type="text" className="input" placeholder="e.g. Moon Dog"
+                          value={launchName} onChange={e => setLaunchName(e.target.value)} disabled={launchLoading} />
                       </div>
                       <div>
-                        <label className="block text-xs text-nexus-muted mb-1">{t.okbLiquidity}</label>
-                        <input type="text" className="input w-full" placeholder="0.1"
-                               value={launchOKB} onChange={e => setLaunchOKB(e.target.value)} disabled={launchLoading} />
+                        <label className="block text-xs text-nexus-muted mb-1">{t.tokenSymbol}</label>
+                        <input type="text" className="input" placeholder="e.g. MDOG"
+                          value={launchSymbol} onChange={e => setLaunchSymbol(e.target.value.toUpperCase())} disabled={launchLoading} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-nexus-muted mb-1">{t.totalSupply}</label>
+                          <input type="text" className="input" value={launchSupply} onChange={e => setLaunchSupply(e.target.value)} disabled={launchLoading} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-nexus-muted mb-1">{t.okbLiquidity}</label>
+                          <input type="text" className="input" value={launchOKB} onChange={e => setLaunchOKB(e.target.value)} disabled={launchLoading} />
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="card text-xs text-nexus-muted space-y-1">
-                    <div className="flex justify-between"><span>Network</span><span className="text-white">X Layer</span></div>
-                    <div className="flex justify-between"><span>DEX Pool</span><span className="text-white">Uniswap V3 (1% fee)</span></div>
-                    <div className="flex justify-between"><span>Pair</span><span className="text-white">{launchSymbol || "TOKEN"}/WOKB</span></div>
-                    <div className="flex justify-between"><span>LP Range</span><span className="text-white">Full Range</span></div>
-                    <div className="flex justify-between"><span>Decimals</span><span className="text-white">18</span></div>
-                  </div>
-
-                  {launchLoading ? (
-                    <div className="card text-center py-4">
-                      <div className="animate-spin w-6 h-6 border-2 border-nexus-accent border-t-transparent rounded-full mx-auto mb-2" />
-                      <p className="text-sm text-nexus-accent-light">
-                        {t.launchStep} {launchStep} {t.of} {launchTotal}
-                      </p>
+                    <div className="card text-xs text-nexus-muted space-y-1">
+                      <div className="flex justify-between"><span>Network</span><span className="text-white">X Layer</span></div>
+                      <div className="flex justify-between"><span>DEX</span><span className="text-white">Uniswap V3 (1% fee)</span></div>
+                      <div className="flex justify-between"><span>Pair</span><span className="text-white">{launchSymbol || "TOKEN"}/WOKB</span></div>
+                      <div className="flex justify-between"><span>LP Range</span><span className="text-white">Full Range</span></div>
                     </div>
-                  ) : (
-                    <button onClick={handleLaunch}
-                            disabled={!launchName || !launchSymbol}
-                            className="btn-primary w-full py-3 text-sm font-semibold disabled:opacity-40">
-                      {t.launchToken} &#x1F680;
-                    </button>
-                  )}
+
+                    {launchLoading ? (
+                      <div className="card text-center py-4">
+                        <div className="animate-spin w-6 h-6 border-2 border-nexus-green border-t-transparent rounded-full mx-auto mb-2" />
+                        <p className="text-sm text-nexus-green">{t.step} {launchStep} {t.of} {launchTotal}</p>
+                      </div>
+                    ) : (
+                      <button onClick={handleLaunch} disabled={!launchName || !launchSymbol}
+                        className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-nexus-green hover:bg-nexus-green/85 text-white disabled:opacity-40"
+                        style={{ boxShadow: "0 4px 14px rgba(16,185,129,0.3)" }}>
+                        {t.launchToken} &#x1F680;
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
           </div>
         )}
 
-        {activeView === "wallet" && (
+        {/* ── STRATEGY VIEW ── */}
+        {activeView === "strategy" && (
           <div className="flex-1 overflow-y-auto p-6">
-            <h1 className="text-xl font-bold text-white mb-6">{t.wallet}</h1>
-            <div className="max-w-md">
-              <div className="card">
-                {!wallet ? (
-                  <div className="space-y-3">
-                    <button onClick={handleConnectOKX} className="btn-primary w-full text-sm py-3 flex items-center justify-center gap-2">
-                      <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
-                      {t.connectOKX}
-                    </button>
-                    <div className="text-[10px] text-nexus-muted text-center">0 Gas USDC · x402 Payments</div>
-                    <div className="border-t border-nexus-border my-2" />
-                    <button onClick={handleCreateWallet} className="btn-secondary w-full text-sm py-2.5">{t.createLocal}</button>
-                    <button onClick={() => setPasswordMode("import")} className="btn-secondary w-full text-sm py-2.5">{t.importKey}</button>
-                    {passwordMode === "import" && (
-                      <div className="space-y-2 pt-2">
-                        <input type="password" value={importKey} onChange={e => setImportKey(e.target.value)} className="input" placeholder="Private key (0x...)" />
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleImport()} />
-                        <button onClick={handleImport} className="btn-primary w-full text-sm py-2.5">Import & Encrypt</button>
-                        <button onClick={() => { setPasswordMode(null); setImportKey(""); setPassword(""); }} className="btn-ghost w-full text-xs">Cancel</button>
+            <div className="max-w-2xl mx-auto">
+              {activeStrategyId ? (
+                /* Strategy detail */
+                (() => {
+                  const s = strategies.find(x => x.id === activeStrategyId);
+                  if (!s) return null;
+                  return (
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <h1 className="text-xl font-bold text-white flex-1">{s.name}</h1>
+                        <button onClick={() => toggleStrategy(s.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium ${s.status === "running" ? "bg-nexus-green/15 text-nexus-green" : "bg-white/5 text-nexus-muted"}`}>
+                          {s.status === "running" ? t.running : t.paused}
+                        </button>
+                        <button onClick={() => deleteStrategy(s.id)} className="text-xs text-nexus-muted hover:text-red-400">{t.deleteStrategy}</button>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="text-[10px] text-nexus-muted uppercase tracking-wider">X Layer Address</div>
-                    <div className="text-xs font-mono text-nexus-accent-light bg-nexus-bg p-3 rounded-xl break-all border border-nexus-border">{wallet}</div>
-                    <div className="flex items-center justify-between">
-                      <span className={`flex items-center gap-1.5 text-xs ${unlocked ? "text-nexus-green" : "text-nexus-muted"}`}>
-                        <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
-                        {walletMode === "okx" ? t.okxWalletConnected : unlocked ? t.unlocked : t.locked}
-                      </span>
-                      {walletMode === "local" && unlocked && (
-                        <button onClick={handleLock} className="btn-ghost text-xs">Lock</button>
+                      <div className="card mb-4">
+                        <div className="text-xs text-nexus-muted mb-1">{t.strategyDesc}</div>
+                        <p className="text-sm text-white">{s.description}</p>
+                      </div>
+                      {s.results.length > 0 && (
+                        <div className="space-y-3">
+                          {s.results.map((r, i) => (
+                            <div key={i} className="card">
+                              <div className="text-xs text-nexus-muted mb-1">Result #{i + 1}</div>
+                              <div className="text-sm text-white whitespace-pre-wrap">{r}</div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {walletMode === "local" && !unlocked && passwordMode !== "set" && (
-                      <div className="space-y-2">
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                          className="input" placeholder="Trading password" onKeyDown={e => e.key === "Enter" && handleUnlock()} />
-                        <button onClick={handleUnlock} className="btn-primary w-full text-sm py-2.5">Unlock</button>
+                  );
+                })()
+              ) : (
+                /* New strategy form */
+                <>
+                  <h1 className="text-xl font-bold text-white mb-1">{t.newStrategy}</h1>
+                  <p className="text-nexus-muted text-sm mb-6">{t.strategyDesc}</p>
+
+                  <div className="space-y-4">
+                    <div className="card space-y-4">
+                      <div>
+                        <label className="block text-xs text-nexus-muted mb-1">{t.strategyName}</label>
+                        <input type="text" className="input" placeholder={lang === "zh" ? "例如：低市值高潜力筛选" : "e.g. Low mcap gems"}
+                          value={strategyName} onChange={e => setStrategyName(e.target.value)} />
                       </div>
-                    )}
-                    {passwordMode === "set" && (
-                      <div className="space-y-2">
-                        <div className="text-xs text-nexus-yellow">Set trading password:</div>
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                          className="input" placeholder="Min 6 characters" onKeyDown={e => e.key === "Enter" && handleSetPassword()} />
-                        <button onClick={handleSetPassword} className="btn-primary w-full text-sm py-2.5">Set Password</button>
+                      <div>
+                        <label className="block text-xs text-nexus-muted mb-1">{t.strategyDesc}</label>
+                        <textarea className="input min-h-[100px]"
+                          placeholder={lang === "zh" ? "例如：帮我找 X Layer 上市值低于 10 万、持仓人数大于 100 的代币" : "e.g. Find tokens on X Layer with mcap under $100k and more than 100 holders"}
+                          value={strategyInput} onChange={e => setStrategyInput(e.target.value)} />
                       </div>
-                    )}
-                    {walletMode === "okx" && (
-                      <button onClick={() => { disconnectOKXWallet(); setWallet(null); setWalletMode(null); setUnlocked(false); }}
-                        className="btn-ghost text-xs text-nexus-red w-full">{t.disconnect} OKX</button>
-                    )}
-                    <div className="text-[10px] text-nexus-muted flex items-center gap-1 mt-2">
-                      <IconShield /> {walletMode === "okx" ? t.okxGas : t.keyEncrypted}
                     </div>
+                    <button onClick={handleCreateStrategy} disabled={!strategyName || !strategyInput}
+                      className="btn-primary w-full text-sm disabled:opacity-40">{t.saveStrategy}</button>
                   </div>
-                )}
-              </div>
 
-              {/* USDC Approval Card */}
-              {wallet && (
-              <div className="card mt-4">
-                <h2 className="text-sm font-semibold text-white mb-3">{t.walletPnl} (USDC)</h2>
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-nexus-muted">{t.usdcBalance}</span>
-                    <span className="text-white">${usdcBalance}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-nexus-muted">{t.approved}</span>
-                    <span className={parseFloat(usdcAllowance) > 0 ? "text-nexus-green" : "text-nexus-muted"}>
-                      ${usdcAllowance}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-nexus-muted">{t.costPerCall}</span>
-                    <span className="text-white">$0.01 ~ $0.08</span>
-                  </div>
-                </div>
-
-                {parseFloat(usdcAllowance) > 0 ? (
-                  <div className="mt-3 p-2 rounded-lg bg-nexus-green/5 border border-nexus-green/20 text-[10px] text-nexus-green flex items-center gap-1.5">
-                    <IconShield /> {t.autoPayment}
-                  </div>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-[10px] text-nexus-muted">
-                      {t.approveOnce}
-                    </p>
-                    <button
-                      onClick={handleApproveUSDC}
-                      disabled={approving || !unlocked}
-                      className="btn-primary w-full text-sm py-2.5 disabled:opacity-40"
-                    >
-                      {approving ? "Approving..." : `Approve $${DEFAULT_APPROVE_AMOUNT} USDC`}
-                    </button>
-                    {!unlocked && walletMode === "local" && (
-                      <p className="text-[10px] text-nexus-yellow">{t.unlockFirst}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  {strategies.length === 0 && (
+                    <div className="text-center text-nexus-muted text-sm mt-8">{t.noStrategies}</div>
+                  )}
+                </>
               )}
             </div>
           </div>
         )}
+      </main>
 
-        {/* ── OVERVIEW VIEW ── */}
-        {activeView === "overview" && (
-          <div className="flex-1 overflow-y-auto p-6">
-            <h1 className="text-xl font-bold text-white mb-6">{t.overview}</h1>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="card">
-                <div className="stat-label">Total API Calls</div>
-                <div className="text-2xl font-bold text-white mt-1">{stats?.total_calls || 0}</div>
-              </div>
-              <div className="card">
-                <div className="stat-label">{t.revenue}</div>
-                <div className="text-2xl font-bold text-nexus-green mt-1">${stats?.total_revenue_usd || "0"}</div>
-              </div>
-              <div className="card">
-                <div className="stat-label">Token Chats</div>
-                <div className="text-2xl font-bold text-nexus-accent-light mt-1">{tokenChatList.length}</div>
-              </div>
+      {/* ── x402 Payment Modal ── */}
+      {showPayment && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="card max-w-sm w-full !p-6 space-y-4">
+            <div className="text-center">
+              <div className="text-3xl mb-2">&#x26A1;</div>
+              <h3 className="text-lg font-bold text-white">{t.paymentRequired}</h3>
+              <p className="text-sm text-nexus-muted mt-1">{t.paymentDesc}</p>
             </div>
 
-            {/* PnL Section */}
-            {walletPnL && (
-              <div className="card">
-                <h2 className="text-sm font-semibold text-white mb-4">{t.walletPnl}</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: t.totalPnl, value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
-                    { label: t.unrealized, value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
-                    { label: t.winRate, value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
-                    { label: t.trades, value: walletPnL.overview?.total_trades || "0", color: "text-white" },
-                  ].map((s, i) => (
-                    <div key={i} className="bg-nexus-bg rounded-xl p-3 border border-nexus-border">
-                      <div className="stat-label">{s.label}</div>
-                      <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="bg-white/5 rounded-xl p-3 space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-nexus-muted">Network</span><span className="text-white">X Layer</span></div>
+              <div className="flex justify-between"><span className="text-nexus-muted">Payment</span><span className="text-white">1 USDC</span></div>
+              <div className="flex justify-between"><span className="text-nexus-muted">{t.creditsLeft}</span><span className="text-nexus-green">+100</span></div>
+              <div className="flex justify-between"><span className="text-nexus-muted">Protocol</span><span className="text-nexus-accent-light">x402</span></div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => { setShowPayment(false); setPendingRetry(null); }}
+                className="btn-secondary flex-1 text-sm">{lang === "zh" ? "取消" : "Cancel"}</button>
+              <button onClick={handleBuyCredits} disabled={paymentLoading || walletMode !== "okx"}
+                className="btn-primary flex-1 text-sm disabled:opacity-40">
+                {paymentLoading ? t.buying : t.buyCredits}
+              </button>
+            </div>
+
+            {walletMode !== "okx" && (
+              <p className="text-[10px] text-red-400 text-center">{t.needOKXWallet}</p>
             )}
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }

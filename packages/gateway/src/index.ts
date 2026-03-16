@@ -411,6 +411,14 @@ app.post("/trade/sign-and-send", async (req, res) => {
     return res.status(400).json({ error: "Missing trade params or no active session. Unlock wallet first." });
   }
 
+  // x402 quota check for trade execution
+  if (wa) {
+    const quota = checkAndDeductQuota(wa);
+    if (!quota.allowed) {
+      return res.status(402).json(build402Response(wa));
+    }
+  }
+
   try {
     // Step 1: Ask Trader Agent to BUILD unsigned tx (no private key sent to Trader)
     const buildResp = await fetch(`${TRADER_URL}/trade/build`, {
@@ -456,6 +464,110 @@ app.post("/trade/sign-and-send", async (req, res) => {
 
 // ── Chat history persistence (Railway Volume at /data) ──
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+
+// ── x402 Quota & Credits System ──
+// Free 10 actions/day (launch + strategy + trading combined), then $0.01/action
+const FREE_DAILY_LIMIT = 10;
+const CREDIT_PRICE_USD = 0.01; // per action after free tier
+const CREDITS_PER_DOLLAR = 100; // $1 USDC = 100 credits
+const CREDITS_FILE = `${process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data"}/credits.json`;
+
+interface UserCredits {
+  credits: number;
+  dailyUsage: number;
+  dailyDate: string; // YYYY-MM-DD
+  totalPaid: number;
+  lastPaymentTx?: string;
+}
+
+let creditsStore: Record<string, UserCredits> = {};
+try {
+  if (existsSync(CREDITS_FILE)) creditsStore = JSON.parse(readFileSync(CREDITS_FILE, "utf-8"));
+} catch { creditsStore = {}; }
+
+function saveCreditsStore() {
+  try { writeFileSync(CREDITS_FILE, JSON.stringify(creditsStore)); } catch (e: any) {
+    console.error("[Credits] Save failed:", e.message);
+  }
+}
+
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function getUserCredits(walletAddress: string): UserCredits {
+  const key = walletAddress.toLowerCase();
+  if (!creditsStore[key]) {
+    creditsStore[key] = { credits: 0, dailyUsage: 0, dailyDate: getToday(), totalPaid: 0 };
+  }
+  const user = creditsStore[key];
+  // Reset daily usage if new day
+  if (user.dailyDate !== getToday()) {
+    user.dailyUsage = 0;
+    user.dailyDate = getToday();
+  }
+  return user;
+}
+
+/**
+ * Check if user can perform a paid action. Returns { allowed, remaining, needsPayment }.
+ * If within free tier, increments usage. If has credits, decrements.
+ */
+function checkAndDeductQuota(walletAddress: string): { allowed: boolean; freeRemaining: number; credits: number; needsPayment: boolean } {
+  const user = getUserCredits(walletAddress);
+
+  if (user.dailyUsage < FREE_DAILY_LIMIT) {
+    user.dailyUsage++;
+    saveCreditsStore();
+    return { allowed: true, freeRemaining: FREE_DAILY_LIMIT - user.dailyUsage, credits: user.credits, needsPayment: false };
+  }
+
+  if (user.credits > 0) {
+    user.credits--;
+    saveCreditsStore();
+    return { allowed: true, freeRemaining: 0, credits: user.credits, needsPayment: false };
+  }
+
+  return { allowed: false, freeRemaining: 0, credits: 0, needsPayment: true };
+}
+
+/**
+ * Add credits after payment verification. $1 USDC = 100 credits.
+ */
+function addCredits(walletAddress: string, amountUsd: number, txHash: string): { credits: number } {
+  const user = getUserCredits(walletAddress);
+  const newCredits = Math.round(amountUsd * CREDITS_PER_DOLLAR);
+  user.credits += newCredits;
+  user.totalPaid += amountUsd;
+  user.lastPaymentTx = txHash;
+  saveCreditsStore();
+  console.log(`[Credits] Added ${newCredits} credits to ${walletAddress.slice(0, 8)}... (tx: ${txHash})`);
+  return { credits: user.credits };
+}
+
+/**
+ * Build x402 payment required response
+ */
+function build402Response(walletAddress: string) {
+  const user = getUserCredits(walletAddress);
+  return {
+    error: "Payment Required",
+    x402Version: 2,
+    freeUsed: user.dailyUsage,
+    freeLimit: FREE_DAILY_LIMIT,
+    creditsRemaining: user.credits,
+    payment: {
+      scheme: "exact",
+      network: "eip155:196",
+      asset: XLAYER_USDC,
+      price: "$1.00",
+      amountRequired: "1000000", // 1 USDC (6 decimals)
+      payTo: platformAccount.address,
+      creditsGranted: CREDITS_PER_DOLLAR,
+      description: `Purchase ${CREDITS_PER_DOLLAR} AgentNexus credits ($1 USDC = ${CREDITS_PER_DOLLAR} actions)`,
+    },
+  };
+}
 
 const STORAGE_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data";
 const CHATS_FILE = `${STORAGE_DIR}/chat-histories.json`;
@@ -565,12 +677,90 @@ app.get("/wallet-stats", (_req, res) => {
   res.json(getWalletStats());
 });
 
+// ── x402 Credits API ──
+
+// Get user's credit balance and daily usage
+app.get("/credits/:walletAddress", (req, res) => {
+  const user = getUserCredits(req.params.walletAddress);
+  res.json({
+    credits: user.credits,
+    dailyUsage: user.dailyUsage,
+    dailyLimit: FREE_DAILY_LIMIT,
+    freeRemaining: Math.max(0, FREE_DAILY_LIMIT - user.dailyUsage),
+    totalPaid: user.totalPaid,
+    pricePerCredit: `$${CREDIT_PRICE_USD}`,
+    buyPrice: "$1.00 USDC = 100 credits",
+    payTo: platformAccount.address,
+  });
+});
+
+// Verify payment and add credits
+app.post("/credits/purchase", async (req, res) => {
+  const { wallet_address, tx_hash } = req.body;
+  if (!wallet_address || !tx_hash) {
+    return res.status(400).json({ error: "wallet_address and tx_hash required" });
+  }
+
+  try {
+    // Verify the transaction on-chain
+    const receipt = await paymentPublicClient.getTransactionReceipt({ hash: tx_hash as `0x${string}` });
+    if (!receipt || receipt.status !== "success") {
+      return res.status(400).json({ error: "Transaction failed or not found" });
+    }
+
+    // Check it's a USDC transfer to our platform wallet
+    // Look for Transfer event in logs
+    const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"; // Transfer(address,address,uint256)
+    const usdcTransfer = receipt.logs.find(log =>
+      log.address.toLowerCase() === XLAYER_USDC.toLowerCase() &&
+      log.topics[0] === transferTopic &&
+      log.topics[2] && log.topics[2].toLowerCase().includes(platformAccount.address.slice(2).toLowerCase())
+    );
+
+    if (!usdcTransfer) {
+      return res.status(400).json({ error: "No USDC transfer to platform wallet found in transaction" });
+    }
+
+    // Extract amount from log data (uint256)
+    const amountRaw = BigInt(usdcTransfer.data);
+    const amountUsd = Number(amountRaw) / 1e6; // USDC has 6 decimals
+
+    if (amountUsd < 0.01) {
+      return res.status(400).json({ error: "Payment amount too small" });
+    }
+
+    // Check for duplicate payment
+    const user = getUserCredits(wallet_address);
+    if (user.lastPaymentTx === tx_hash) {
+      return res.status(400).json({ error: "Payment already processed" });
+    }
+
+    const result = addCredits(wallet_address, amountUsd, tx_hash);
+    res.json({
+      success: true,
+      creditsAdded: Math.round(amountUsd * CREDITS_PER_DOLLAR),
+      totalCredits: result.credits,
+      amountPaid: `$${amountUsd.toFixed(2)}`,
+      txHash: tx_hash,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: `Payment verification failed: ${e.message}` });
+  }
+});
+
 // ── Token Launch: generate deploy + pool creation transactions ──
 app.post("/launch", async (req, res) => {
   const { name, symbol, totalSupply, okbForLiquidity, from } = req.body;
   if (!name || !symbol || !from) {
     return res.status(400).json({ error: "name, symbol, from required" });
   }
+
+  // x402 quota check
+  const quota = checkAndDeductQuota(from);
+  if (!quota.allowed) {
+    return res.status(402).json(build402Response(from));
+  }
+
   try {
     const plan = await generateLaunchPlan({
       name,
@@ -624,6 +814,16 @@ app.post("/chat", async (req, res) => {
 
     if (calls.length === 0) {
       return res.json({ reply: intent.reply || "I'm not sure what you'd like to do. Try asking about a token or signal.", results: [] });
+    }
+
+    // x402 quota check: trading, launch, strategy actions cost credits; pure data queries are free
+    const paidAgents = ["trader", "launch"];
+    const hasPaidAction = calls.some(c => paidAgents.includes(c.agent));
+    if (hasPaidAction && wallet_address) {
+      const quota = checkAndDeductQuota(wallet_address);
+      if (!quota.allowed) {
+        return res.status(402).json(build402Response(wallet_address));
+      }
     }
 
     // Step 2: Get user wallet address (no private key access here)
