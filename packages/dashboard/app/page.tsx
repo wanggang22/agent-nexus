@@ -770,12 +770,12 @@ export default function Dashboard() {
 
             {/* Input */}
             <div className="border-t border-nexus-border p-4">
-              <div className="max-w-3xl mx-auto flex gap-3">
-                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  className="flex-1 input !rounded-xl" placeholder={t.placeholder} disabled={chatLoading} />
+              <div className="max-w-3xl mx-auto flex gap-3 items-end">
+                <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  rows={5} className="flex-1 input !rounded-xl resize-none" placeholder={t.placeholder} disabled={chatLoading} />
                 <button onClick={handleSend} disabled={chatLoading || !chatInput.trim()}
-                  className="btn-primary !py-3 !px-4 !rounded-xl disabled:opacity-40">
+                  className="btn-primary !px-4 !rounded-xl disabled:opacity-40 h-[120px]">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                   </svg>
