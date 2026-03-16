@@ -381,35 +381,73 @@ export default function Dashboard() {
     }
   };
 
+  // Load strategies from server on wallet connect
+  useEffect(() => {
+    if (!wallet) return;
+    fetch(`${GATEWAY}/strategies/${wallet}`).then(r => r.json()).then(data => {
+      if (data.strategies?.length) {
+        setStrategies(data.strategies.map((s: any) => ({
+          id: s.id, name: s.name, description: s.description,
+          status: s.status, results: (s.results || []).map((r: any) => r.summary),
+          createdAt: new Date(s.createdAt).getTime(),
+        })));
+      }
+    }).catch(() => {});
+  }, [wallet]);
+
   // ── Strategy handler ──
   const handleCreateStrategy = async () => {
-    if (!strategyName || !strategyInput) return;
-    const id = Date.now().toString();
-    const strategy: Strategy = { id, name: strategyName, description: strategyInput, status: "running", results: [], createdAt: Date.now() };
-    setStrategies(prev => [strategy, ...prev]);
-    setActiveStrategyId(id);
-    setStrategyName(""); setStrategyInput("");
+    if (!strategyName || !strategyInput || !wallet) return;
 
-    // Run immediately
+    // Save to server
     try {
-      const resp = await fetch(`${GATEWAY}/chat`, {
+      const resp = await fetch(`${GATEWAY}/strategies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: strategyInput, wallet_address: wallet }),
+        body: JSON.stringify({ wallet_address: wallet, name: strategyName, description: strategyInput }),
       });
       const data = await resp.json();
-      const result = data.reply || "No results";
-      setStrategies(prev => prev.map(s => s.id === id ? { ...s, results: [result] } : s));
+      const id = data.strategy?.id || Date.now().toString();
+
+      const strategy: Strategy = { id, name: strategyName, description: strategyInput, status: "running", results: [], createdAt: Date.now() };
+      setStrategies(prev => [strategy, ...prev]);
+      setActiveStrategyId(id);
+      setStrategyName(""); setStrategyInput("");
+
+      // Run immediately
+      const runResp = await fetch(`${GATEWAY}/strategies/${id}/run`, { method: "POST", headers: { "Content-Type": "application/json" } });
+
+      if (runResp.status === 402) {
+        const payData = await runResp.json();
+        handle402(payData, () => {});
+        return;
+      }
+
+      const runData = await runResp.json();
+      if (runData.success) {
+        setStrategies(prev => prev.map(s => s.id === id ? { ...s, results: [runData.result.summary] } : s));
+      }
     } catch {}
   };
 
-  const toggleStrategy = (id: string) => {
-    setStrategies(prev => prev.map(s => s.id === id ? { ...s, status: s.status === "running" ? "paused" as const : "running" as const } : s));
+  const toggleStrategy = async (id: string) => {
+    const s = strategies.find(x => x.id === id);
+    if (!s) return;
+    const newStatus = s.status === "running" ? "paused" : "running";
+    setStrategies(prev => prev.map(x => x.id === id ? { ...x, status: newStatus as any } : x));
+    try {
+      await fetch(`${GATEWAY}/strategies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch {}
   };
 
-  const deleteStrategy = (id: string) => {
+  const deleteStrategy = async (id: string) => {
     setStrategies(prev => prev.filter(s => s.id !== id));
     if (activeStrategyId === id) setActiveStrategyId(null);
+    try { await fetch(`${GATEWAY}/strategies/${id}`, { method: "DELETE" }); } catch {}
   };
 
   // ── Landing page (not logged in) ──
@@ -739,6 +777,14 @@ export default function Dashboard() {
                           className={`px-3 py-1 rounded-lg text-xs font-medium ${s.status === "running" ? "bg-nexus-green/15 text-nexus-green" : "bg-white/5 text-nexus-muted"}`}>
                           {s.status === "running" ? t.running : t.paused}
                         </button>
+                        <button onClick={async () => {
+                          try {
+                            const resp = await fetch(`${GATEWAY}/strategies/${s.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" } });
+                            if (resp.status === 402) { handle402(await resp.json(), () => {}); return; }
+                            const data = await resp.json();
+                            if (data.success) setStrategies(prev => prev.map(x => x.id === s.id ? { ...x, results: [data.result.summary, ...x.results] } : x));
+                          } catch {}
+                        }} className="px-3 py-1 rounded-lg text-xs font-medium bg-nexus-accent/15 text-nexus-accent-light hover:bg-nexus-accent/25">{t.runNow}</button>
                         <button onClick={() => deleteStrategy(s.id)} className="text-xs text-nexus-muted hover:text-red-400">{t.deleteStrategy}</button>
                       </div>
                       <div className="card mb-4">

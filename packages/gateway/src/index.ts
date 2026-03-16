@@ -748,6 +748,141 @@ app.post("/credits/purchase", async (req, res) => {
   }
 });
 
+// ── Strategy System: save + cron execution ──
+const STRATEGIES_FILE = `${STORAGE_DIR}/strategies.json`;
+
+interface SavedStrategy {
+  id: string;
+  walletAddress: string;
+  name: string;
+  description: string; // natural language filter
+  status: "running" | "paused";
+  intervalMinutes: number;
+  results: Array<{ timestamp: string; summary: string }>;
+  createdAt: string;
+  lastRun?: string;
+}
+
+let strategiesStore: SavedStrategy[] = [];
+try {
+  if (existsSync(STRATEGIES_FILE)) strategiesStore = JSON.parse(readFileSync(STRATEGIES_FILE, "utf-8"));
+} catch { strategiesStore = []; }
+
+function saveStrategiesStore() {
+  try { writeFileSync(STRATEGIES_FILE, JSON.stringify(strategiesStore)); } catch (e: any) {
+    console.error("[Strategy] Save failed:", e.message);
+  }
+}
+
+// Create strategy
+app.post("/strategies", (req, res) => {
+  const { wallet_address, name, description, interval_minutes } = req.body;
+  if (!wallet_address || !name || !description) {
+    return res.status(400).json({ error: "wallet_address, name, description required" });
+  }
+  const strategy: SavedStrategy = {
+    id: Date.now().toString(),
+    walletAddress: wallet_address,
+    name,
+    description,
+    status: "running",
+    intervalMinutes: interval_minutes || 60,
+    results: [],
+    createdAt: new Date().toISOString(),
+  };
+  strategiesStore.push(strategy);
+  saveStrategiesStore();
+  res.json({ success: true, strategy });
+});
+
+// List strategies for a wallet
+app.get("/strategies/:walletAddress", (req, res) => {
+  const addr = req.params.walletAddress.toLowerCase();
+  const userStrategies = strategiesStore.filter(s => s.walletAddress.toLowerCase() === addr);
+  res.json({ strategies: userStrategies });
+});
+
+// Update strategy status
+app.patch("/strategies/:id", (req, res) => {
+  const { status } = req.body;
+  const strategy = strategiesStore.find(s => s.id === req.params.id);
+  if (!strategy) return res.status(404).json({ error: "Strategy not found" });
+  if (status) strategy.status = status;
+  saveStrategiesStore();
+  res.json({ success: true, strategy });
+});
+
+// Delete strategy
+app.delete("/strategies/:id", (req, res) => {
+  strategiesStore = strategiesStore.filter(s => s.id !== req.params.id);
+  saveStrategiesStore();
+  res.json({ success: true });
+});
+
+// Run a strategy manually (also called by cron)
+app.post("/strategies/:id/run", async (req, res) => {
+  const strategy = strategiesStore.find(s => s.id === req.params.id);
+  if (!strategy) return res.status(404).json({ error: "Strategy not found" });
+
+  // x402 quota check (strategy execution costs a credit)
+  const quota = checkAndDeductQuota(strategy.walletAddress);
+  if (!quota.allowed) {
+    return res.status(402).json(build402Response(strategy.walletAddress));
+  }
+
+  try {
+    // Execute strategy by sending the description to /chat internally
+    const chatResp = await fetch(`http://localhost:${PORT}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: strategy.description, wallet_address: strategy.walletAddress }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const chatData = await chatResp.json() as any;
+
+    const result = {
+      timestamp: new Date().toISOString(),
+      summary: chatData.reply || chatData.error || "No results",
+    };
+
+    strategy.results.unshift(result);
+    if (strategy.results.length > 20) strategy.results = strategy.results.slice(0, 20);
+    strategy.lastRun = result.timestamp;
+    saveStrategiesStore();
+
+    res.json({ success: true, result });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// Cron: run all active strategies that are due
+async function runDueStrategies() {
+  const now = Date.now();
+  for (const strategy of strategiesStore) {
+    if (strategy.status !== "running") continue;
+
+    const lastRun = strategy.lastRun ? new Date(strategy.lastRun).getTime() : 0;
+    const interval = strategy.intervalMinutes * 60 * 1000;
+
+    if (now - lastRun < interval) continue;
+
+    console.log(`[Strategy] Running "${strategy.name}" for ${strategy.walletAddress.slice(0, 8)}...`);
+    try {
+      await fetch(`http://localhost:${PORT}/strategies/${strategy.id}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (e: any) {
+      console.error(`[Strategy] Failed "${strategy.name}": ${e.message}`);
+    }
+  }
+}
+
+// Run cron every 5 minutes
+setInterval(runDueStrategies, 5 * 60 * 1000);
+
 // ── Token Launch: generate deploy + pool creation transactions ──
 app.post("/launch", async (req, res) => {
   const { name, symbol, totalSupply, okbForLiquidity, from } = req.body;
