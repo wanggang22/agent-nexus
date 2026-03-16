@@ -23,17 +23,17 @@ const LANG: Record<string, Record<string, string>> = {
     memeScanner: "Meme Scanner", search: "Search", overview: "Overview", wallet: "Wallet",
     market: "MARKET", tools: "TOOLS", tokenChats: "TOKEN CHATS",
     refresh: "Refresh", disconnect: "Disconnect", logout: "Logout",
-    connectOKX: "{t.connectOKX}", createLocal: "{t.createLocal}",
-    importKey: "{t.importKey}", unlockWallet: "{t.unlockWallet}",
+    connectOKX: "Connect OKX Wallet", createLocal: "Create Local Wallet",
+    importKey: "Import Private Key", unlockWallet: "Unlock Wallet",
     setPassword: "Set Password", unlock: "Unlock", cancel: "Cancel",
     approve: "Approve", approving: "Approving...",
     hotDesc: "Trending tokens by volume & mentions",
     smartDesc: "What smart money wallets are buying",
     whaleDesc: "Large transactions (>$10k)",
     memeDesc: "New meme tokens launching", searchDesc: "Find any token",
-    analyzeWith: "{t.analyzeWith}", refreshData: "{t.refreshData}",
-    aiChat: "{t.aiChat}", askAbout: "Ask about",
-    noData: "No data for", tryChain: "{t.tryChain}",
+    analyzeWith: "Analyze with AI", refreshData: "Refresh Data",
+    aiChat: "AI Strategy Chat", askAbout: "Ask about",
+    noData: "No data for", tryChain: "Try another chain.",
     loading: "Loading", connecting: "Connecting...",
     totalCalls: "Total Calls", revenue: "Revenue",
     walletPnl: "Wallet PnL", totalPnl: "Total PnL",
@@ -1162,7 +1162,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span className={`flex items-center gap-1.5 text-xs ${unlocked ? "text-nexus-green" : "text-nexus-muted"}`}>
                         <span className={`w-2 h-2 rounded-full ${unlocked ? "bg-nexus-green" : "bg-nexus-muted"}`} />
-                        {walletMode === "okx" ? "{t.okxWalletConnected}" : unlocked ? t.unlocked : t.locked}
+                        {walletMode === "okx" ? t.okxWalletConnected : unlocked ? t.unlocked : t.locked}
                       </span>
                       {walletMode === "local" && unlocked && (
                         <button onClick={handleLock} className="btn-ghost text-xs">Lock</button>
@@ -1188,7 +1188,7 @@ export default function Dashboard() {
                         className="btn-ghost text-xs text-nexus-red w-full">{t.disconnect} OKX</button>
                     )}
                     <div className="text-[10px] text-nexus-muted flex items-center gap-1 mt-2">
-                      <IconShield /> {walletMode === "okx" ? "{t.okxGas}" : "{t.keyEncrypted}"}
+                      <IconShield /> {walletMode === "okx" ? t.okxGas : t.keyEncrypted}
                     </div>
                   </div>
                 )}
@@ -1267,9 +1267,9 @@ export default function Dashboard() {
                 <h2 className="text-sm font-semibold text-white mb-4">{t.walletPnl}</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: "{t.totalPnl}", value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
-                    { label: "{t.unrealized}", value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
-                    { label: "{t.winRate}", value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
+                    { label: t.totalPnl, value: `$${walletPnL.overview?.total_pnl_usd || "0"}`, color: parseFloat(walletPnL.overview?.total_pnl_usd || "0") >= 0 ? "text-nexus-green" : "text-nexus-red" },
+                    { label: t.unrealized, value: `$${walletPnL.overview?.unrealized_pnl_usd || "0"}`, color: "text-nexus-accent-light" },
+                    { label: t.winRate, value: `${walletPnL.overview?.win_rate || "0"}%`, color: "text-white" },
                     { label: t.trades, value: walletPnL.overview?.total_trades || "0", color: "text-white" },
                   ].map((s, i) => (
                     <div key={i} className="bg-nexus-bg rounded-xl p-3 border border-nexus-border">
