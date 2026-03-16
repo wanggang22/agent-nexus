@@ -584,7 +584,7 @@ export default function Dashboard() {
 
   // ── Main dashboard ──
   return (
-    <div className="h-screen flex bg-nexus-bg">
+    <div className="h-screen flex bg-nexus-bg overflow-hidden">
       {/* ── Sidebar ── */}
       <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-nexus-card border-r border-nexus-border transition-all duration-200 flex-shrink-0`}>
         {/* Header */}
@@ -716,7 +716,7 @@ export default function Dashboard() {
       </aside>
 
       {/* ── Main content ── */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* ── CHAT VIEW ── */}
         {activeView === "chat" && (
           <div className="flex-1 flex flex-col">
