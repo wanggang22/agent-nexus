@@ -433,8 +433,8 @@ export default function Dashboard() {
         body: JSON.stringify({ name: launchName, symbol: launchSymbol, totalSupply: launchSupply, okbForLiquidity: launchOKB, from: wallet }),
       });
 
-      // x402: handle payment required
-      if (resp.status === 402) {
+      // x402 / rate limit: handle payment required
+      if (resp.status === 402 || resp.status === 429) {
         const data = await resp.json();
         setLaunches(prev => prev.filter(l => l.id !== launchId));
         handle402(data, handleLaunch);
@@ -642,11 +642,17 @@ export default function Dashboard() {
           {launches.map(l => (
             <button key={l.id}
               onClick={() => { setActiveLaunchId(l.id); setActiveView("launch"); }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all group ${
                 activeLaunchId === l.id && activeView === "launch" ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted hover:text-white hover:bg-white/5"
               }`}>
               <span className={`w-2 h-2 rounded-full ${l.status === "live" ? "bg-nexus-green" : l.status === "launching" ? "bg-yellow-400 animate-pulse" : "bg-nexus-muted"}`} />
-              {sidebarOpen && <span className="truncate">{l.symbol}</span>}
+              {sidebarOpen && (
+                <>
+                  <span className="flex-1 text-left truncate">{l.symbol}</span>
+                  <span onClick={e => { e.stopPropagation(); setLaunches(prev => prev.filter(x => x.id !== l.id)); if (activeLaunchId === l.id) setActiveLaunchId(null); }}
+                    className="opacity-0 group-hover:opacity-100 text-nexus-muted hover:text-red-400 text-xs">✕</span>
+                </>
+              )}
             </button>
           ))}
 
@@ -662,11 +668,17 @@ export default function Dashboard() {
           {strategies.map(s => (
             <button key={s.id}
               onClick={() => { setActiveStrategyId(s.id); setActiveView("strategy"); }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all group ${
                 activeStrategyId === s.id && activeView === "strategy" ? "bg-nexus-accent/15 text-nexus-accent-light" : "text-nexus-muted hover:text-white hover:bg-white/5"
               }`}>
               <span className={`w-2 h-2 rounded-full ${s.status === "running" ? "bg-nexus-green" : "bg-nexus-muted"}`} />
-              {sidebarOpen && <span className="truncate">{s.name}</span>}
+              {sidebarOpen && (
+                <>
+                  <span className="flex-1 text-left truncate">{s.name}</span>
+                  <span onClick={e => { e.stopPropagation(); deleteStrategy(s.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-nexus-muted hover:text-red-400 text-xs">✕</span>
+                </>
+              )}
             </button>
           ))}
         </nav>
