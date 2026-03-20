@@ -88,11 +88,7 @@ export default function Dashboard() {
 
   // ── Core state ──
   const [wallet, setWallet] = useState<string | null>(null);
-  const [walletMode, setWalletMode] = useState<"okx" | "agentic" | "twitter" | null>(null);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginCode, setLoginCode] = useState("");
-  const [loginStep, setLoginStep] = useState<"email" | "code" | "done">("email");
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [walletMode, setWalletMode] = useState<"okx" | "twitter" | null>(null);
   const [lang, setLang] = useState<"en" | "zh">(() => {
     if (typeof window === "undefined") return "zh";
     return (localStorage.getItem("agentnexus_lang") as "en" | "zh") || "zh";
@@ -248,87 +244,18 @@ export default function Dashboard() {
 
   // ── Auth ──
   const isLoggedIn = !!session || !!wallet;
-  const displayName = walletMode === "agentic" ? loginEmail || "Agentic Wallet" : twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
 
   // Auto-connect OKX Wallet if previously authorized (e.g. in OKX App browser)
   useEffect(() => {
     autoConnectOKX().then(result => {
       if (result) { setWallet(result.address); setWalletMode("okx"); }
     });
-    // Also check Agentic Wallet status
-    fetch(`${GATEWAY}/agentic/status`).then(r => r.json()).then(data => {
-      if (data.loggedIn && !wallet) {
-        setWalletMode("agentic");
-        setLoginStep("done");
-        // Try to get address
-        fetch(`${GATEWAY}/agentic/addresses`).then(r => r.json()).then(addr => {
-          if (addr.raw) setWallet(addr.raw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "agentic-wallet");
-        }).catch(() => setWallet("agentic-wallet"));
-      }
-    }).catch(() => {});
   }, []);
 
   const handleConnectOKX = async () => {
     const result = await connectOKXWallet();
     if (result) { setWallet(result.address); setWalletMode("okx"); }
-  };
-
-  // Agentic Wallet email login
-  const handleEmailLogin = async () => {
-    if (!loginEmail || loginLoading) return;
-    setLoginLoading(true);
-    try {
-      const resp = await fetch(`${GATEWAY}/agentic/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail }),
-      });
-      const data = await resp.json();
-      if (data.alreadyLoggedIn) {
-        setWalletMode("agentic");
-        setLoginStep("done");
-        setWallet("agentic-wallet");
-        // Fetch address
-        fetch(`${GATEWAY}/agentic/addresses`).then(r => r.json()).then(addr => {
-          if (addr.raw) setWallet(addr.raw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "agentic-wallet");
-        }).catch(() => {});
-      } else if (data.success) {
-        setLoginStep("code");
-      } else {
-        alert(data.error || "Login failed");
-      }
-    } catch (e: any) {
-      alert(`Login error: ${e.message}`);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    if (!loginCode || loginLoading) return;
-    setLoginLoading(true);
-    try {
-      const resp = await fetch(`${GATEWAY}/agentic/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, code: loginCode }),
-      });
-      const data = await resp.json();
-      if (data.success) {
-        setWalletMode("agentic");
-        setLoginStep("done");
-        // Extract wallet address from response
-        const addrStr = JSON.stringify(data.addresses || "");
-        const match = addrStr.match(/0x[a-fA-F0-9]{40}/);
-        setWallet(match?.[0] || "agentic-wallet");
-      } else {
-        alert(data.error || "Verification failed");
-      }
-    } catch (e: any) {
-      alert(`Verify error: ${e.message}`);
-    } finally {
-      setLoginLoading(false);
-    }
   };
 
   // ── Chat handler ──
@@ -378,7 +305,7 @@ export default function Dashboard() {
       // Check if it's a trade confirmation
       const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
 
-      if (tradeResult && wallet && (walletMode === "okx" || walletMode === "agentic")) {
+      if (tradeResult && wallet && walletMode === "okx") {
         const td = tradeResult.data;
         // Show AI reply first
         setChatThreads(prev => prev.map(c =>
@@ -409,10 +336,7 @@ export default function Dashboard() {
   const executeTrade = async (threadId: string, params: any) => {
     if (!wallet) return;
 
-    const isAgentic = walletMode === "agentic";
-    const execMsg = isAgentic
-      ? (lang === "zh" ? "正在执行交易..." : "Executing trade...")
-      : (lang === "zh" ? "正在准备交易，请在 OKX Wallet 中签名..." : "Preparing trade, please sign in OKX Wallet...");
+    const execMsg = lang === "zh" ? "正在准备交易，请在 OKX Wallet 中签名..." : "Preparing trade, please sign in OKX Wallet...";
 
     setChatThreads(prev => prev.map(c =>
       c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: execMsg }] } : c
@@ -421,19 +345,7 @@ export default function Dashboard() {
     try {
       let resultText: string;
 
-      if (isAgentic) {
-        // Agentic Wallet: server-side execution via onchainos, zero popup
-        const resp = await fetch(`${GATEWAY}/trade/quote`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ from_token: params.from_token, to_token: params.to_token, amount: params.amount, wallet_address: wallet }),
-        });
-        if (resp.status === 402) { handle402(await resp.json(), () => executeTrade(threadId, params)); return; }
-        const quoteData = await resp.json();
-        // TODO: execute via onchainos wallet send when swap routing is ready
-        resultText = quoteData.reply || quoteData.error || JSON.stringify(quoteData).slice(0, 300);
-      } else {
-        // OKX Wallet: client-side signing
+      {
         const provider = (window as any).okxwallet;
         if (!provider) throw new Error("OKX Wallet not found");
 
@@ -466,7 +378,7 @@ export default function Dashboard() {
         } else {
           resultText = `${lang === "zh" ? "无法构建交易" : "Could not build trade"}: ${quoteData.error || JSON.stringify(quoteData).slice(0, 200)}`;
         }
-      }
+      }  // end trade execution block
 
       // Replace "executing" message with result
       setChatThreads(prev => prev.map(c => {
@@ -761,7 +673,7 @@ export default function Dashboard() {
                 {sidebarOpen && (
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-white truncate">{displayName}</div>
-                    <div className="text-[10px] text-nexus-muted">{walletMode === "agentic" ? "Agentic Wallet" : walletMode === "okx" ? "OKX Wallet" : "X Login"}</div>
+                    <div className="text-[10px] text-nexus-muted">{walletMode === "okx" ? "OKX Wallet" : "X Login"}</div>
                   </div>
                 )}
               </div>
@@ -780,9 +692,6 @@ export default function Dashboard() {
                   <div className="flex gap-2 mt-1">
                     {walletMode === "okx" && (
                       <button onClick={() => { setWallet(null); setWalletMode(null); }} className="text-[10px] text-nexus-muted hover:text-red-400">{t.disconnect}</button>
-                    )}
-                    {walletMode === "agentic" && (
-                      <button onClick={() => { fetch(`${GATEWAY}/agentic/logout`, { method: "POST" }); setWallet(null); setWalletMode(null); setLoginStep("email"); setLoginEmail(""); setLoginCode(""); }} className="text-[10px] text-nexus-muted hover:text-red-400">{t.logout}</button>
                     )}
                     {session && (
                       <button onClick={() => signOut()} className="text-[10px] text-nexus-muted hover:text-red-400">{t.logout}</button>
@@ -892,7 +801,7 @@ export default function Dashboard() {
                       className="btn-secondary text-sm">{t.launchAnother}</button>
                   </div>
                 </div>
-              ) : (!wallet || (walletMode !== "okx" && walletMode !== "agentic")) ? (
+              ) : walletMode !== "okx" || !wallet ? (
                 /* Need wallet */
                 <div className="text-center py-12">
                   <div className="text-5xl mb-4">&#x1F680;</div>
