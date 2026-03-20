@@ -1,8 +1,15 @@
 import express from "express";
 import cors from "cors";
-import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
+import { env, recordCall, requestLogger, setupGracefulShutdown, resolveToken } from "shared";
 import { assessRisk, tokenSafety, portfolioRisk, tokenBalances } from "./rules-engine.js";
 import { privateKeyToAccount } from "viem/accounts";
+
+/** Resolve symbol to address if needed */
+function resolveAddr(token: string, chain = "xlayer"): string {
+  if (/^0x[a-fA-F0-9]{40}$/.test(token)) return token;
+  const resolved = resolveToken(token, chain);
+  return resolved?.address || token;
+}
 
 const AGENT = "Risk Agent";
 const account = privateKeyToAccount(env.PRIVATE_KEY as `0x${string}`);
@@ -21,7 +28,7 @@ app.post("/risk/assess", async (req, res) => {
   try {
     const { token, chain, portfolio_value } = req.body;
     if (!token) return res.status(400).json({ error: "token address required" });
-    const result = await assessRisk(token, chain || "xlayer", portfolio_value);
+    const result = await assessRisk(resolveAddr(token, chain), chain || "xlayer", portfolio_value);
     recordCall(AGENT, "assess", 0);
     res.json(result);
   } catch (e: any) {
@@ -32,7 +39,7 @@ app.post("/risk/assess", async (req, res) => {
 app.get("/risk/token-safety/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await tokenSafety(req.params.token, chain);
+    const result = await tokenSafety(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "token-safety", 0);
     res.json(result);
   } catch (e: any) {

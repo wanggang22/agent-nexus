@@ -1,6 +1,13 @@
 import express from "express";
 import cors from "cors";
-import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown } from "shared";
+import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown, resolveToken } from "shared";
+
+/** Resolve symbol to address if needed */
+function resolveAddr(token: string, chain = "xlayer"): string {
+  if (/^0x[a-fA-F0-9]{40}$/.test(token)) return token;
+  const resolved = resolveToken(token, chain);
+  return resolved?.address || token;
+}
 import {
   technicalAnalysis, fundamentalAnalysis, spreadAnalysis, memeAnalysis, fullAnalysis,
   basicTechnical, basicFundamental, basicSpread, basicMeme, basicFullAnalysis,
@@ -43,7 +50,7 @@ app.get("/ai-stats", (_req, res) => {
 app.get("/basic/technical/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicTechnical(req.params.token, chain);
+    const result = await basicTechnical(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-technical", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -54,7 +61,7 @@ app.get("/basic/technical/:token", async (req, res) => {
 app.get("/basic/fundamental/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicFundamental(req.params.token, chain);
+    const result = await basicFundamental(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-fundamental", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -65,7 +72,7 @@ app.get("/basic/fundamental/:token", async (req, res) => {
 app.get("/basic/spread/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicSpread(req.params.token, chain);
+    const result = await basicSpread(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-spread", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -76,7 +83,7 @@ app.get("/basic/spread/:token", async (req, res) => {
 app.get("/basic/meme/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicMeme(req.params.token, chain);
+    const result = await basicMeme(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-meme", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -87,7 +94,7 @@ app.get("/basic/meme/:token", async (req, res) => {
 app.get("/basic/full/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicFullAnalysis(req.params.token, chain);
+    const result = await basicFullAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-full", 0);
     res.json({ mode: "basic", ...result });
   } catch (e: any) {
@@ -99,7 +106,7 @@ app.get("/basic/full/:token", async (req, res) => {
 app.get("/basic/meme-deep/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await basicMeme(req.params.token, chain);
+    const result = await basicMeme(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "basic-meme-deep", 0);
     res.json({ mode: "basic-deep", ...result });
   } catch (e: any) {
@@ -111,7 +118,7 @@ app.get("/basic/meme-deep/:token", async (req, res) => {
 app.get("/analysis/technical/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await technicalAnalysis(req.params.token, chain);
+    const result = await technicalAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "technical", 0.02);
     res.json(result);
   } catch (e: any) {
@@ -122,7 +129,7 @@ app.get("/analysis/technical/:token", async (req, res) => {
 app.get("/analysis/fundamental/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await fundamentalAnalysis(req.params.token, chain);
+    const result = await fundamentalAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "fundamental", 0.03);
     res.json(result);
   } catch (e: any) {
@@ -133,7 +140,7 @@ app.get("/analysis/fundamental/:token", async (req, res) => {
 app.get("/analysis/spread/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await spreadAnalysis(req.params.token, chain);
+    const result = await spreadAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "spread", 0.01);
     res.json(result);
   } catch (e: any) {
@@ -144,7 +151,7 @@ app.get("/analysis/spread/:token", async (req, res) => {
 app.get("/analysis/meme/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await memeAnalysis(req.params.token, chain);
+    const result = await memeAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "meme", 0.03);
     res.json(result);
   } catch (e: any) {
@@ -155,7 +162,7 @@ app.get("/analysis/meme/:token", async (req, res) => {
 app.get("/analysis/full/:token", async (req, res) => {
   try {
     const chain = (req.query.chain as string) || "xlayer";
-    const result = await fullAnalysis(req.params.token, chain);
+    const result = await fullAnalysis(resolveAddr(req.params.token, chain), chain);
     recordCall(AGENT, "full", 0.08);
     res.json(result);
   } catch (e: any) {
