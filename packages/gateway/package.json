@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "express": "^4.21.0",
     "cors": "^2.8.5",
-    "viem": "^2.21.0",
-    "shared": "workspace:*"
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.3.1",
+    "shared": "workspace:*",
+    "viem": "^2.21.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }

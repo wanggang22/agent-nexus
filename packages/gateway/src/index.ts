@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { execSync } from "child_process";
 import {
@@ -37,6 +38,25 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Rate limiting — 1 request per minute per IP for all AI endpoints
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 1,
+  message: { error: "Rate limit exceeded. Max 1 request per minute.", retry_after: 60 },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.headers["x-forwarded-for"] as string || "unknown",
+});
+// Apply to all endpoints that call Claude AI or onchainos
+app.use("/chat", aiLimiter);
+app.use("/signals", aiLimiter);
+app.use("/basic", aiLimiter);
+app.use("/analysis", aiLimiter);
+app.use("/risk", aiLimiter);
+app.use("/trade", aiLimiter);
+app.use("/launch", aiLimiter);
+app.use("/strategies", aiLimiter);
 
 // ── Shared session store: unlocked wallets with TTL ──
 const SESSION_TTL = 365 * 24 * 60 * 60 * 1000; // permanent (until /lock or server restart)
