@@ -152,6 +152,16 @@ async function pollMentions() {
         continue;
       }
 
+      // Launch requests → redirect to Dashboard
+      const isLaunchRequest = /launch|deploy|create token|发币|发射|创建代币|发一个|发个币|造币|mint/i.test(message);
+      if (isLaunchRequest) {
+        await replyToTweet(tweet.id, `Token launch requires OKX Wallet signing. Please use our Dashboard:\n\n${SITE_URL}\n\nConnect OKX Wallet → Launch tab → fill in token name and symbol → done!`);
+        repliedTweets.add(tweet.id);
+        lastMentionId = tweet.id;
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
       // Trade requests → check session, execute or redirect
       const isTradeRequest = /swap|buy|sell|trade|换|买|卖/i.test(message);
       if (isTradeRequest) {
