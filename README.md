@@ -109,10 +109,8 @@ agent-nexus/
 │   ├── shared/           # OnchainOS wrapper, token registry, types
 │   ├── twitter-bot/      # Twitter @mention interaction
 │   └── contracts/        # Solidity (AgentRegistry, PaymentLedger)
-├── contracts/
-│   └── MemeToken.sol     # ERC-20 template for token launch
-└── docs/
-    └── OnchainOS_Agentic_Wallet_Reference.md
+└── contracts/
+    └── MemeToken.sol     # ERC-20 template for token launch
 ```
 
 ## Smart Contracts (X Layer Mainnet)
