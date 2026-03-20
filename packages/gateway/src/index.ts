@@ -202,6 +202,9 @@ function setupKeyring() {
 }
 
 function runOnchainos(args: string, timeoutMs = 30000): string {
+  if (args.includes("wallet")) {
+    console.log(`[Agentic] DBUS=${process.env.DBUS_SESSION_BUS_ADDRESS || "unset"} GNOME_KEYRING=${process.env.GNOME_KEYRING_CONTROL || "unset"}`);
+  }
   try {
     const result = execSync(`onchainos ${args}`, {
       timeout: timeoutMs, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
@@ -212,6 +215,11 @@ function runOnchainos(args: string, timeoutMs = 30000): string {
         OKX_PASSPHRASE: env.OKX_PASSPHRASE || process.env.OKX_PASSPHRASE || "",
         HOME: process.env.HOME || "/root",
         XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || "/tmp",
+        DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS || "",
+        GNOME_KEYRING_CONTROL: process.env.GNOME_KEYRING_CONTROL || "",
+        // Try file-based keyring fallbacks
+        KEYRING_BACKEND: "file",
+        PYTHON_KEYRING_BACKEND: "keyrings.alt.file.PlaintextKeyring",
       },
     });
     return result.trim();
