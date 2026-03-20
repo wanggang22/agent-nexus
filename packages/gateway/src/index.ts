@@ -15,87 +15,11 @@ import { privateKeyToAccount } from "viem/accounts";
 const AGENT = "Gateway";
 const PORT = parseInt(process.env.PORT || "4000");
 
-// ── USDC auto-payment via transferFrom ──
+// ── Platform wallet + USDC config ──
 const XLAYER_USDC = "0x74b7f16337b8972027f6196a17a631ac6de26d22" as const;
-const ERC20_ABI = [
-  { name: "transferFrom", type: "function", stateMutability: "nonpayable",
-    inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "amount", type: "uint256" }],
-    outputs: [{ name: "", type: "bool" }] },
-  { name: "allowance", type: "function", stateMutability: "view",
-    inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }] },
-  { name: "balanceOf", type: "function", stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }] },
-] as const;
 
 const platformAccount = privateKeyToAccount(env.PRIVATE_KEY as `0x${string}`);
 const paymentPublicClient = createPublicClient({ chain: xlayer, transport: http(env.XLAYER_RPC) });
-const paymentWalletClient = createWalletClient({ account: platformAccount, chain: xlayer, transport: http(env.XLAYER_RPC) });
-
-// Paid routes: path pattern → price in USD
-const PAID_ROUTES: Record<string, number> = {
-  "/analysis/technical/": 0.02,
-  "/analysis/fundamental/": 0.03,
-  "/analysis/spread/": 0.01,
-  "/analysis/meme/": 0.03,
-  "/analysis/full/": 0.08,
-};
-
-function getPaidRoutePrice(path: string): number | null {
-  for (const [pattern, price] of Object.entries(PAID_ROUTES)) {
-    if (path.startsWith(pattern)) return price;
-  }
-  return null;
-}
-
-/**
- * Auto-collect USDC payment via transferFrom (user pre-approved via ERC-20 approve).
- * Returns true if payment collected or route is free.
- */
-async function collectPayment(userAddress: string, priceUsd: number): Promise<{ success: boolean; error?: string; txHash?: string }> {
-  try {
-    const amount = parseUnits(priceUsd.toString(), 6); // USDC 6 decimals
-
-    // Check allowance
-    const allowance = await paymentPublicClient.readContract({
-      address: XLAYER_USDC,
-      abi: ERC20_ABI,
-      functionName: "allowance",
-      args: [userAddress as `0x${string}`, platformAccount.address],
-    });
-
-    if ((allowance as bigint) < amount) {
-      return { success: false, error: `Insufficient USDC allowance. Approve at least $${priceUsd} for ${platformAccount.address}` };
-    }
-
-    // Check balance
-    const balance = await paymentPublicClient.readContract({
-      address: XLAYER_USDC,
-      abi: ERC20_ABI,
-      functionName: "balanceOf",
-      args: [userAddress as `0x${string}`],
-    });
-
-    if ((balance as bigint) < amount) {
-      return { success: false, error: `Insufficient USDC balance. Need $${priceUsd}` };
-    }
-
-    // Execute transferFrom
-    const txHash = await paymentWalletClient.writeContract({
-      address: XLAYER_USDC,
-      abi: ERC20_ABI,
-      functionName: "transferFrom",
-      args: [userAddress as `0x${string}`, platformAccount.address, amount],
-    });
-
-    console.log(`[Payment] Collected $${priceUsd} USDC from ${userAddress.slice(0, 8)}... tx: ${txHash}`);
-    return { success: true, txHash };
-  } catch (e: any) {
-    console.error(`[Payment] Failed: ${e.message}`);
-    return { success: false, error: e.message };
-  }
-}
 
 // Service URLs — configurable for Railway internal networking
 const SIGNAL_URL = process.env.SIGNAL_URL || "http://localhost:4001";
@@ -903,39 +827,14 @@ app.get("/wallet/sync/:platform/:userId", (req, res) => {
 });
 
 // ── Payment info: platform wallet + allowance check ──
+// Payment info — x402 credits system
 app.get("/payment/info", (_req, res) => {
   res.json({
     platform_wallet: platformAccount.address,
     usdc_address: XLAYER_USDC,
     network: "eip155:196",
-    paid_routes: PAID_ROUTES,
-    note: "Approve USDC spending to platform_wallet for auto-payment on paid routes",
+    model: "x402 credits — $1 USDC = 100 actions, 10 free/day",
   });
-});
-
-app.get("/payment/allowance/:userAddress", async (req, res) => {
-  try {
-    const allowance = await paymentPublicClient.readContract({
-      address: XLAYER_USDC,
-      abi: ERC20_ABI,
-      functionName: "allowance",
-      args: [req.params.userAddress as `0x${string}`, platformAccount.address],
-    });
-    const balance = await paymentPublicClient.readContract({
-      address: XLAYER_USDC,
-      abi: ERC20_ABI,
-      functionName: "balanceOf",
-      args: [req.params.userAddress as `0x${string}`],
-    });
-    res.json({
-      allowance_usdc: formatUnits(allowance as bigint, 6),
-      balance_usdc: formatUnits(balance as bigint, 6),
-      platform_wallet: platformAccount.address,
-      approved: (allowance as bigint) > 0n,
-    });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message });
-  }
 });
 
 app.get("/wallet-stats", (_req, res) => {
@@ -1375,41 +1274,6 @@ const ROUTE_MAP: Array<{ prefix: string; target: string }> = [
 app.use(async (req, res, next) => {
   const route = ROUTE_MAP.find((r) => req.path.startsWith(r.prefix));
   if (!route) return next();
-
-  // ── Auto-collect USDC payment for paid routes ──
-  const price = getPaidRoutePrice(req.path);
-  if (price) {
-    const userWallet = (req.headers["x-wallet-address"] as string) || (req.query.wallet as string);
-    if (!userWallet) {
-      return res.status(402).json({
-        error: "Payment required",
-        price: `$${price}`,
-        detail: "Include X-Wallet-Address header or ?wallet= param. Approve USDC at /payment/info",
-        platform_wallet: platformAccount.address,
-      });
-    }
-
-    const payment = await collectPayment(userWallet, price);
-    if (!payment.success) {
-      return res.status(402).json({
-        error: "Payment failed",
-        price: `$${price}`,
-        detail: payment.error,
-        platform_wallet: platformAccount.address,
-        action: `Approve USDC spending for ${platformAccount.address}`,
-      });
-    }
-
-    // Payment collected — add receipt to response
-    res.setHeader("X-Payment-TxHash", payment.txHash || "");
-    res.setHeader("X-Payment-Amount", `$${price}`);
-
-    // Record revenue
-    totalCalls++;
-    totalRevenue += price;
-    callLog.push({ agent: "Analyst", service: req.path, price, timestamp: new Date().toISOString() });
-    if (callLog.length > 1000) callLog.splice(0, callLog.length - 500);
-  }
 
   // Forward request to the target agent
   const targetUrl = `${route.target}${req.originalUrl}`;
