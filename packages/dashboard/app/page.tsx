@@ -322,7 +322,7 @@ export default function Dashboard() {
         executeTrade(threadId!, td.trade_params);
       } else {
         const replyText = launchResult
-          ? `I've prepared a token launch plan. Go to the Launch tab to complete it.`
+          ? (lang === "zh" ? `发币方案已准备好，请点击左侧「发币」标签完成操作。` : `Token launch plan ready. Go to the Launch tab to complete it.`)
           : tradeResult && !wallet
           ? `${data.reply || tradeResult.data.summary}\n\n${lang === "zh" ? "请先连接 OKX 钱包" : "Please connect OKX Wallet first"}`
           : (data.reply || data.error || "No response");
