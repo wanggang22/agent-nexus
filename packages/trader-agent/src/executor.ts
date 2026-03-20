@@ -52,6 +52,24 @@ function resolveSlippage(priceImpact: number, maxSlippage: string): number {
  * Get a swap quote from OKX DEX aggregator.
  * @param maxSlippage - Max slippage tolerance. "auto" (default) = auto-detect, or "5" for 5%
  */
+// Convert native token zero address to 0xeee...eee format (DEX standard)
+function normalizeNativeToken(address: string): string {
+  if (address === "0x0000000000000000000000000000000000000000") {
+    return "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  }
+  return address;
+}
+
+// Convert UI amount to minimal units (wei for 18 decimals, or appropriate for token)
+function toMinimalUnits(amount: string, decimals = 18): string {
+  const parts = amount.split(".");
+  const whole = parts[0] || "0";
+  const frac = (parts[1] || "").padEnd(decimals, "0").slice(0, decimals);
+  const raw = whole + frac;
+  // Remove leading zeros but keep at least one digit
+  return raw.replace(/^0+/, "") || "0";
+}
+
 export async function getQuote(
   fromToken: string,
   toToken: string,
@@ -59,8 +77,11 @@ export async function getQuote(
   chain = "xlayer",
   maxSlippage = "auto"
 ): Promise<TradeQuote> {
+  const from = normalizeNativeToken(fromToken);
+  const to = normalizeNativeToken(toToken);
+  const amountWei = toMinimalUnits(amount);
   const raw = await runOnchainosAsync(
-    `swap quote --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain === "xlayer" ? "196" : chain}`
+    `swap quote --from ${from} --to ${to} --amount ${amountWei} --chain ${chain === "xlayer" ? "196" : chain}`
   );
 
   if (raw) {

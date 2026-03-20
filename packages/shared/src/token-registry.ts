@@ -3,7 +3,7 @@ import { runOnchainos, safeJsonParse } from "./onchainos.js";
 // ── Built-in: major tokens on X Layer (chain ID 196) ──
 const XLAYER_TOKENS: Record<string, string> = {
   // Native & wrapped
-  OKB: "0x0000000000000000000000000000000000000000",    // native gas token
+  OKB: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",    // native gas token (DEX standard)
   WOKB: "0xe538905cf8410324e03A5A23C1c177a474D59b2b",   // wrapped OKB
   // Stablecoins
   USDT: "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
