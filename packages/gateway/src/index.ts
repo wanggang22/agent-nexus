@@ -648,7 +648,7 @@ app.post("/trade/sign-and-send", async (req, res) => {
   if (wa) {
     const quota = checkAndDeductQuota(wa);
     if (!quota.allowed) {
-      return res.status(402).json(build402Response(wa));
+      return send402(res, wa);
     }
   }
 
@@ -783,11 +783,36 @@ function addCredits(walletAddress: string, amountUsd: number, txHash: string): {
 }
 
 /**
- * Build x402 payment required response
+ * Build standard x402 payment required response with proper headers.
+ * Follows x402 protocol: https://x402.org
  */
-function build402Response(walletAddress: string) {
+function send402(res: any, walletAddress: string) {
   const user = getUserCredits(walletAddress);
-  return {
+
+  const paymentRequirements = {
+    x402Version: 2,
+    accepts: [{
+      scheme: "exact",
+      network: "eip155:196",
+      maxAmountRequired: "1000000", // 1 USDC (6 decimals)
+      asset: XLAYER_USDC,
+      payTo: platformAccount.address,
+      maxTimeoutSeconds: 300,
+      resource: "/credits/purchase",
+      description: `Purchase ${CREDITS_PER_DOLLAR} AgentNexus credits ($1 USDC = ${CREDITS_PER_DOLLAR} actions)`,
+      mimeType: "application/json",
+    }],
+  };
+
+  // Standard x402 header: base64-encoded payment requirements
+  const encoded = Buffer.from(JSON.stringify(paymentRequirements)).toString("base64");
+  res.setHeader("PAYMENT-REQUIRED", encoded);
+  res.setHeader("X-Payment-Network", "eip155:196");
+  res.setHeader("X-Payment-Asset", "USDC");
+  res.setHeader("X-Payment-Amount", "1000000");
+  res.setHeader("X-Payment-PayTo", platformAccount.address);
+
+  return res.status(402).json({
     error: "Payment Required",
     x402Version: 2,
     freeUsed: user.dailyUsage,
@@ -798,12 +823,12 @@ function build402Response(walletAddress: string) {
       network: "eip155:196",
       asset: XLAYER_USDC,
       price: "$1.00",
-      amountRequired: "1000000", // 1 USDC (6 decimals)
+      amountRequired: "1000000",
       payTo: platformAccount.address,
       creditsGranted: CREDITS_PER_DOLLAR,
       description: `Purchase ${CREDITS_PER_DOLLAR} AgentNexus credits ($1 USDC = ${CREDITS_PER_DOLLAR} actions)`,
     },
-  };
+  });
 }
 
 const STORAGE_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || "/data";
@@ -965,6 +990,16 @@ app.post("/credits/purchase", async (req, res) => {
     }
 
     const result = addCredits(wallet_address, amountUsd, tx_hash);
+
+    // x402 standard: PAYMENT-RESPONSE header with settlement proof
+    const settlementResponse = {
+      success: true,
+      transaction: tx_hash,
+      network: "eip155:196",
+      payer: wallet_address,
+    };
+    res.setHeader("PAYMENT-RESPONSE", Buffer.from(JSON.stringify(settlementResponse)).toString("base64"));
+
     res.json({
       success: true,
       creditsAdded: Math.round(amountUsd * CREDITS_PER_DOLLAR),
@@ -1056,7 +1091,7 @@ app.post("/strategies/:id/run", async (req, res) => {
   // x402 quota check (strategy execution costs a credit)
   const quota = checkAndDeductQuota(strategy.walletAddress);
   if (!quota.allowed) {
-    return res.status(402).json(build402Response(strategy.walletAddress));
+    return send402(res, strategy.walletAddress);
   }
 
   try {
@@ -1122,7 +1157,7 @@ app.post("/launch", async (req, res) => {
   // x402 quota check
   const quota = checkAndDeductQuota(from);
   if (!quota.allowed) {
-    return res.status(402).json(build402Response(from));
+    return send402(res, from);
   }
 
   try {
@@ -1186,7 +1221,7 @@ app.post("/chat", async (req, res) => {
     if (hasPaidAction && wallet_address) {
       const quota = checkAndDeductQuota(wallet_address);
       if (!quota.allowed) {
-        return res.status(402).json(build402Response(wallet_address));
+        return send402(res, wallet_address);
       }
     }
 
