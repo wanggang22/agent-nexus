@@ -82,6 +82,8 @@ export interface RiskAssessment {
     dev_history: { passed: boolean; detail: string };
     bundle: { passed: boolean; ratio: number };
   };
+  price?: number;
+  market_cap?: number;
   max_position_usd: number;
   timestamp: string;
 }

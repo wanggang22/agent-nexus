@@ -21,14 +21,20 @@ export async function assessRisk(
   chain = "xlayer",
   portfolioValue = 10000
 ): Promise<RiskAssessment> {
-  // Gather data from Onchain OS
-  const advancedRaw = await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`);
-  const holdersRaw = await runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`);
-  const priceRaw = await runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`);
+  // Gather data from Onchain OS — fetch all data sources in parallel
+  const [advancedRaw, holdersRaw, priceRaw, liquidityRaw, tokenInfoRaw] = await Promise.all([
+    runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
+    runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`),
+    runOnchainosAsync(`market price --address ${tokenAddress} --chain ${chain}`),
+    runOnchainosAsync(`token liquidity --address ${tokenAddress} --chain ${chain}`),
+    runOnchainosAsync(`token info --address ${tokenAddress} --chain ${chain}`),
+  ]);
 
   const advanced = safeJsonParse(advancedRaw)?.data || {};
   const holdersData = safeJsonParse(holdersRaw)?.data;
   const priceData = safeJsonParse(priceRaw)?.data?.[0];
+  const liqData = safeJsonParse(liquidityRaw)?.data || safeJsonParse(liquidityRaw) || {};
+  const tokenInfo = safeJsonParse(tokenInfoRaw)?.data?.[0] || safeJsonParse(tokenInfoRaw)?.data || {};
 
   // Risk level from API: 1=low, 2=medium, 3=high
   const riskControlLevel = parseInt(advanced.riskControlLevel || "0");
@@ -50,16 +56,21 @@ export async function assessRisk(
     sell_tax: sellTax,
   };
 
-  // Liquidity check — use market cap as proxy
-  const marketCapStr = advanced.marketCapUsd || "0";
-  const liquidityProxy = parseFloat(marketCapStr) || 0;
+  // Liquidity check — use multiple data sources for accuracy
+  const liquidityFromLiq = parseFloat(liqData.totalLiquidity || liqData.liquidityUsd || "0");
+  const liquidityFromAdvanced = parseFloat(advanced.marketCapUsd || "0");
+  const liquidityFromInfo = parseFloat(tokenInfo.liquidityUsd || tokenInfo.liquidity || "0");
+  const liquidityUsd = liquidityFromLiq || liquidityFromInfo || liquidityFromAdvanced || 0;
   const liquidityCheck = {
-    passed: liquidityProxy >= RISK_RULES.min_liquidity_usd,
-    usd_value: liquidityProxy,
+    passed: liquidityUsd >= RISK_RULES.min_liquidity_usd,
+    usd_value: liquidityUsd,
   };
 
-  // Holders check
-  const holderCount = Array.isArray(holdersData) ? holdersData.length : parseInt(advanced.holders || "0");
+  // Holders check — use holderCount from token info for accurate number
+  const holdersFromInfo = parseInt(tokenInfo.holders || tokenInfo.holderCount || "0");
+  const holdersFromAdvanced = parseInt(advanced.holders || "0");
+  const holdersFromArray = Array.isArray(holdersData) ? holdersData.length : 0;
+  const holderCount = holdersFromInfo || holdersFromAdvanced || holdersFromArray;
   const top10Pct = parseFloat(advanced.top10HoldPercent || "0");
   const holdersCheck = {
     passed: holderCount >= RISK_RULES.min_holders || top10Pct < 50,
@@ -105,6 +116,10 @@ export async function assessRisk(
     approved = true;
   }
 
+  // Price info from market data
+  const price = parseFloat(priceData?.lastPrice || priceData?.price || tokenInfo.price || "0");
+  const marketCap = parseFloat(tokenInfo.marketCap || tokenInfo.marketCapUsd || advanced.marketCapUsd || "0");
+
   return {
     assessment_id: generateId(),
     token: tokenAddress,
@@ -112,6 +127,8 @@ export async function assessRisk(
     approved,
     risk_level,
     checks,
+    price,
+    market_cap: marketCap,
     max_position_usd: approved ? portfolioValue * RISK_RULES.max_position_pct : 0,
     timestamp: new Date().toISOString(),
   };
