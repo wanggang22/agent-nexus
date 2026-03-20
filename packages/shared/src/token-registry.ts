@@ -48,7 +48,7 @@ export function resolveToken(input: string, chain = "xlayer"): { address: string
   }
 
   // OnchainOS token search as fallback
-  const raw = runOnchainos(`token search --keyword ${trimmed} --chain ${chain}`);
+  const raw = runOnchainos(`token search --query ${trimmed} --chain ${chain}`);
   if (raw) {
     const parsed = safeJsonParse(raw);
     const tokens = parsed?.data || parsed;
