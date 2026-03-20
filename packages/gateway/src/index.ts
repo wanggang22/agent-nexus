@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
+import { execSync } from "child_process";
 import {
   env, resolveToken, registerToken, xlayer,
   createWallet, confirmWallet, unlockWallet,
@@ -155,6 +156,161 @@ app.use((req, res, next) => {
     console.log(`[${AGENT}] ${req.method} ${req.path} → ${res.statusCode} (${Date.now() - start}ms)`);
   });
   next();
+});
+
+// ── Agentic Wallet (OnchainOS TEE wallet) ──
+function runOnchainos(args: string, timeoutMs = 30000): string {
+  try {
+    const result = execSync(`onchainos ${args}`, { timeout: timeoutMs, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    return result.trim();
+  } catch (e: any) {
+    const stderr = e.stderr?.toString().trim() || "";
+    const stdout = e.stdout?.toString().trim() || "";
+    console.error(`[Agentic] onchainos ${args.split(" ")[0]} failed:`, stderr || stdout);
+    throw new Error(stderr || stdout || e.message);
+  }
+}
+
+function parseOnchainosJson(output: string): any {
+  try {
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return { raw: output };
+  } catch {
+    return { raw: output };
+  }
+}
+
+// Agentic Wallet session store: email → { accountId, addresses }
+const agenticSessions = new Map<string, { email: string; accountId?: string; addresses?: any; loggedIn: boolean }>();
+
+// Login with email — sends OTP
+app.post("/agentic/login", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "email required" });
+
+  try {
+    const output = runOnchainos(`wallet login ${email} --locale zh-CN`);
+    agenticSessions.set(email, { email, loggedIn: false });
+    res.json({ success: true, message: "Verification code sent to email", email });
+  } catch (e: any) {
+    // If already logged in
+    if (e.message.includes("already") || e.message.includes("logged")) {
+      agenticSessions.set(email, { email, loggedIn: true });
+      res.json({ success: true, message: "Already logged in", email, alreadyLoggedIn: true });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// Verify OTP code
+app.post("/agentic/verify", async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ error: "email and code required" });
+
+  try {
+    const output = runOnchainos(`wallet verify ${code}`);
+    const session = agenticSessions.get(email) || { email, loggedIn: false, addresses: undefined as any };
+    session.loggedIn = true;
+    agenticSessions.set(email, session);
+
+    // Get wallet addresses
+    try {
+      const addrOutput = runOnchainos("wallet addresses --chain 196");
+      (session as any).addresses = parseOnchainosJson(addrOutput);
+    } catch {}
+
+    // Get balance
+    try {
+      const balOutput = runOnchainos("wallet balance --chain 196");
+      const balData = parseOnchainosJson(balOutput);
+      res.json({ success: true, email, addresses: (session as any).addresses, balance: balData });
+    } catch {
+      res.json({ success: true, email, addresses: (session as any).addresses });
+    }
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Get wallet status
+app.get("/agentic/status", (_req, res) => {
+  try {
+    const output = runOnchainos("wallet status");
+    const data = parseOnchainosJson(output);
+    res.json({ loggedIn: true, ...data, raw: output });
+  } catch (e: any) {
+    res.json({ loggedIn: false, error: e.message });
+  }
+});
+
+// Get wallet addresses
+app.get("/agentic/addresses", (_req, res) => {
+  try {
+    const output = runOnchainos("wallet addresses --chain 196");
+    res.json({ success: true, raw: output });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get wallet balance
+app.get("/agentic/balance", (_req, res) => {
+  try {
+    const output = runOnchainos("wallet balance --chain 196");
+    res.json({ success: true, raw: output });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Send tokens via Agentic Wallet (TEE signed, zero popup)
+app.post("/agentic/send", async (req, res) => {
+  const { chain, to, amount, token_address } = req.body;
+  if (!to || !amount) return res.status(400).json({ error: "to and amount required" });
+
+  const chainId = chain || "196";
+  let cmd = `wallet send --chain ${chainId} --amount "${amount}"`;
+  if (token_address) cmd += ` --contract-token ${token_address}`;
+
+  // Note: onchainos wallet send may need --force to skip confirmation
+  try {
+    const output = runOnchainos(`${cmd} --force`, 60000);
+    res.json({ success: true, raw: output, data: parseOnchainosJson(output) });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// x402 payment via Agentic Wallet TEE signing
+app.post("/agentic/x402-pay", async (req, res) => {
+  const { network, amount, pay_to, asset, from } = req.body;
+  if (!amount || !pay_to || !asset) {
+    return res.status(400).json({ error: "amount, pay_to, asset required" });
+  }
+
+  let cmd = `payment x402-pay --network ${network || "eip155:196"} --amount ${amount} --pay-to ${pay_to} --asset ${asset}`;
+  if (from) cmd += ` --from ${from}`;
+
+  try {
+    const output = runOnchainos(cmd, 30000);
+    const data = parseOnchainosJson(output);
+    res.json({ success: true, ...data, raw: output });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Logout
+app.post("/agentic/logout", (_req, res) => {
+  try {
+    runOnchainos("wallet logout");
+    agenticSessions.clear();
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 const AGENTS = [

@@ -12,7 +12,7 @@ const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 const LANG: Record<string, Record<string, string>> = {
   en: {
     newChat: "New Chat", chats: "CHATS", launch: "LAUNCH", strategies: "STRATEGIES",
-    wallet: "Wallet", connectOKX: "Connect OKX Wallet", disconnect: "Disconnect",
+    wallet: "Wallet", connectOKX: "Connect OKX Wallet", disconnect: "Disconnect", emailLogin: "Login with Email", emailPlaceholder: "Enter your email", codePlaceholder: "Enter verification code", sendCode: "Send Code", verifyCode: "Verify", codeSent: "Code sent to your email",
     logout: "Logout", settings: "Settings",
     placeholder: "Ask anything about tokens, trading, analysis...",
     launchToken: "Launch Token", tokenName: "Token Name", tokenSymbol: "Token Symbol",
@@ -40,7 +40,7 @@ const LANG: Record<string, Record<string, string>> = {
   },
   zh: {
     newChat: "新对话", chats: "对话", launch: "发币", strategies: "策略",
-    wallet: "钱包", connectOKX: "连接 OKX 钱包", disconnect: "断开",
+    wallet: "钱包", connectOKX: "连接 OKX 钱包", disconnect: "断开", emailLogin: "邮箱登录", emailPlaceholder: "输入邮箱", codePlaceholder: "输入验证码", sendCode: "发送验证码", verifyCode: "验证", codeSent: "验证码已发送到邮箱",
     logout: "退出", settings: "设置",
     placeholder: "问任何关于代币、交易、分析的问题...",
     launchToken: "发射代币", tokenName: "代币名称", tokenSymbol: "代币符号",
@@ -88,7 +88,11 @@ export default function Dashboard() {
 
   // ── Core state ──
   const [wallet, setWallet] = useState<string | null>(null);
-  const [walletMode, setWalletMode] = useState<"okx" | "twitter" | null>(null);
+  const [walletMode, setWalletMode] = useState<"okx" | "agentic" | "twitter" | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const [loginStep, setLoginStep] = useState<"email" | "code" | "done">("email");
+  const [loginLoading, setLoginLoading] = useState(false);
   const [lang, setLang] = useState<"en" | "zh">(() => {
     if (typeof window === "undefined") return "zh";
     return (localStorage.getItem("agentnexus_lang") as "en" | "zh") || "zh";
@@ -244,18 +248,87 @@ export default function Dashboard() {
 
   // ── Auth ──
   const isLoggedIn = !!session || !!wallet;
-  const displayName = twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
+  const displayName = walletMode === "agentic" ? loginEmail || "Agentic Wallet" : twitterUsername || (wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : null);
 
   // Auto-connect OKX Wallet if previously authorized (e.g. in OKX App browser)
   useEffect(() => {
     autoConnectOKX().then(result => {
       if (result) { setWallet(result.address); setWalletMode("okx"); }
     });
+    // Also check Agentic Wallet status
+    fetch(`${GATEWAY}/agentic/status`).then(r => r.json()).then(data => {
+      if (data.loggedIn && !wallet) {
+        setWalletMode("agentic");
+        setLoginStep("done");
+        // Try to get address
+        fetch(`${GATEWAY}/agentic/addresses`).then(r => r.json()).then(addr => {
+          if (addr.raw) setWallet(addr.raw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "agentic-wallet");
+        }).catch(() => setWallet("agentic-wallet"));
+      }
+    }).catch(() => {});
   }, []);
 
   const handleConnectOKX = async () => {
     const result = await connectOKXWallet();
     if (result) { setWallet(result.address); setWalletMode("okx"); }
+  };
+
+  // Agentic Wallet email login
+  const handleEmailLogin = async () => {
+    if (!loginEmail || loginLoading) return;
+    setLoginLoading(true);
+    try {
+      const resp = await fetch(`${GATEWAY}/agentic/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail }),
+      });
+      const data = await resp.json();
+      if (data.alreadyLoggedIn) {
+        setWalletMode("agentic");
+        setLoginStep("done");
+        setWallet("agentic-wallet");
+        // Fetch address
+        fetch(`${GATEWAY}/agentic/addresses`).then(r => r.json()).then(addr => {
+          if (addr.raw) setWallet(addr.raw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "agentic-wallet");
+        }).catch(() => {});
+      } else if (data.success) {
+        setLoginStep("code");
+      } else {
+        alert(data.error || "Login failed");
+      }
+    } catch (e: any) {
+      alert(`Login error: ${e.message}`);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!loginCode || loginLoading) return;
+    setLoginLoading(true);
+    try {
+      const resp = await fetch(`${GATEWAY}/agentic/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, code: loginCode }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setWalletMode("agentic");
+        setLoginStep("done");
+        // Extract wallet address from response
+        const addrStr = JSON.stringify(data.addresses || "");
+        const match = addrStr.match(/0x[a-fA-F0-9]{40}/);
+        setWallet(match?.[0] || "agentic-wallet");
+      } else {
+        alert(data.error || "Verification failed");
+      }
+    } catch (e: any) {
+      alert(`Verify error: ${e.message}`);
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
   // ── Chat handler ──
@@ -305,7 +378,7 @@ export default function Dashboard() {
       // Check if it's a trade confirmation
       const tradeResult = data.results?.find((r: any) => r.data?.needs_confirmation);
 
-      if (tradeResult && wallet && walletMode === "okx") {
+      if (tradeResult && wallet && (walletMode === "okx" || walletMode === "agentic")) {
         const td = tradeResult.data;
         // Show AI reply first
         setChatThreads(prev => prev.map(c =>
@@ -334,52 +407,65 @@ export default function Dashboard() {
 
   // ── Direct trade execution via OKX Wallet (no confirmation step) ──
   const executeTrade = async (threadId: string, params: any) => {
-    const provider = (window as any).okxwallet;
-    if (!provider || !wallet) return;
+    if (!wallet) return;
 
-    // Show "executing" message
-    const execMsg = lang === "zh" ? "正在准备交易，请在 OKX Wallet 中签名..." : "Preparing trade, please sign in OKX Wallet...";
+    const isAgentic = walletMode === "agentic";
+    const execMsg = isAgentic
+      ? (lang === "zh" ? "正在执行交易..." : "Executing trade...")
+      : (lang === "zh" ? "正在准备交易，请在 OKX Wallet 中签名..." : "Preparing trade, please sign in OKX Wallet...");
+
     setChatThreads(prev => prev.map(c =>
       c.id === threadId ? { ...c, messages: [...c.messages, { role: "ai" as const, text: execMsg }] } : c
     ));
 
     try {
-      // Build unsigned tx via trader agent
-      const buildResp = await fetch(`${GATEWAY}/trade/quote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_token: params.from_token, to_token: params.to_token, amount: params.amount, wallet_address: wallet }),
-      });
-
-      if (buildResp.status === 402) {
-        handle402(await buildResp.json(), () => executeTrade(threadId, params));
-        return;
-      }
-
-      const quoteData = await buildResp.json();
-      const tx = quoteData.tx || quoteData.data?.tx;
-
       let resultText: string;
-      if (tx) {
-        // Sign via OKX Wallet — this is the only popup
-        const txHash = await provider.request({
-          method: "eth_sendTransaction",
-          params: [{ from: wallet, to: tx.to, data: tx.data, value: tx.value || "0x0", chainId: "0xc4" }],
+
+      if (isAgentic) {
+        // Agentic Wallet: server-side execution via onchainos, zero popup
+        const resp = await fetch(`${GATEWAY}/trade/quote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from_token: params.from_token, to_token: params.to_token, amount: params.amount, wallet_address: wallet }),
         });
-
-        // Wait for receipt
-        let confirmed = false;
-        for (let i = 0; i < 30; i++) {
-          await new Promise(r => setTimeout(r, 2000));
-          const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
-          if (receipt) { confirmed = receipt.status === "0x1"; break; }
-        }
-
-        resultText = confirmed
-          ? `${lang === "zh" ? "交易成功！" : "Trade executed!"}\nTx: ${txHash}\nhttps://www.okx.com/web3/explorer/xlayer/tx/${txHash}`
-          : `${lang === "zh" ? "交易已提交" : "Trade submitted"}: ${txHash}`;
+        if (resp.status === 402) { handle402(await resp.json(), () => executeTrade(threadId, params)); return; }
+        const quoteData = await resp.json();
+        // TODO: execute via onchainos wallet send when swap routing is ready
+        resultText = quoteData.reply || quoteData.error || JSON.stringify(quoteData).slice(0, 300);
       } else {
-        resultText = `${lang === "zh" ? "无法构建交易" : "Could not build trade"}: ${quoteData.error || JSON.stringify(quoteData).slice(0, 200)}`;
+        // OKX Wallet: client-side signing
+        const provider = (window as any).okxwallet;
+        if (!provider) throw new Error("OKX Wallet not found");
+
+        const buildResp = await fetch(`${GATEWAY}/trade/quote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from_token: params.from_token, to_token: params.to_token, amount: params.amount, wallet_address: wallet }),
+        });
+        if (buildResp.status === 402) { handle402(await buildResp.json(), () => executeTrade(threadId, params)); return; }
+
+        const quoteData = await buildResp.json();
+        const tx = quoteData.tx || quoteData.data?.tx;
+
+        if (tx) {
+          const txHash = await provider.request({
+            method: "eth_sendTransaction",
+            params: [{ from: wallet, to: tx.to, data: tx.data, value: tx.value || "0x0", chainId: "0xc4" }],
+          });
+
+          let confirmed = false;
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
+            if (receipt) { confirmed = receipt.status === "0x1"; break; }
+          }
+
+          resultText = confirmed
+            ? `${lang === "zh" ? "交易成功！" : "Trade executed!"}\nTx: ${txHash}\nhttps://www.okx.com/web3/explorer/xlayer/tx/${txHash}`
+            : `${lang === "zh" ? "交易已提交" : "Trade submitted"}: ${txHash}`;
+        } else {
+          resultText = `${lang === "zh" ? "无法构建交易" : "Could not build trade"}: ${quoteData.error || JSON.stringify(quoteData).slice(0, 200)}`;
+        }
       }
 
       // Replace "executing" message with result
@@ -560,15 +646,45 @@ export default function Dashboard() {
           <p className="text-nexus-muted text-sm mb-8">{t.heroDesc}</p>
 
           <div className="space-y-3">
-            <button onClick={handleConnectOKX} className="btn-primary w-full flex items-center justify-center gap-2">
+            {/* Agentic Wallet: Email Login (primary) */}
+            <div className="card !p-4 space-y-3 text-left">
+              {loginStep === "email" ? (
+                <>
+                  <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
+                    className="input w-full" placeholder={t.emailPlaceholder} disabled={loginLoading} />
+                  <button onClick={handleEmailLogin} disabled={loginLoading || !loginEmail}
+                    className="btn-primary w-full disabled:opacity-40">
+                    {loginLoading ? "..." : t.sendCode}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-nexus-green">{t.codeSent}</p>
+                  <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleVerifyCode()}
+                    className="input w-full" placeholder={t.codePlaceholder} disabled={loginLoading} autoFocus />
+                  <button onClick={handleVerifyCode} disabled={loginLoading || !loginCode}
+                    className="btn-primary w-full disabled:opacity-40">
+                    {loginLoading ? "..." : t.verifyCode}
+                  </button>
+                  <button onClick={() => setLoginStep("email")} className="text-xs text-nexus-muted hover:text-white w-full text-center">
+                    {lang === "zh" ? "换邮箱" : "Change email"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 text-nexus-muted text-xs">
+              <div className="flex-1 h-px bg-nexus-border" />
+              <span>{lang === "zh" ? "或" : "or"}</span>
+              <div className="flex-1 h-px bg-nexus-border" />
+            </div>
+
+            {/* OKX Wallet (secondary) */}
+            <button onClick={handleConnectOKX} className="btn-secondary w-full flex items-center justify-center gap-2">
               <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
               {t.connectOKX}
-            </button>
-            <button onClick={() => signIn("twitter")} className="btn-secondary w-full flex items-center justify-center gap-2">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-              </svg>
-              {t.loginX}
             </button>
           </div>
 
@@ -675,7 +791,7 @@ export default function Dashboard() {
                 {sidebarOpen && (
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-white truncate">{displayName}</div>
-                    <div className="text-[10px] text-nexus-muted">{walletMode === "okx" ? "OKX Wallet" : "X Login"}</div>
+                    <div className="text-[10px] text-nexus-muted">{walletMode === "agentic" ? "Agentic Wallet" : walletMode === "okx" ? "OKX Wallet" : "X Login"}</div>
                   </div>
                 )}
               </div>
@@ -694,6 +810,9 @@ export default function Dashboard() {
                   <div className="flex gap-2 mt-1">
                     {walletMode === "okx" && (
                       <button onClick={() => { setWallet(null); setWalletMode(null); }} className="text-[10px] text-nexus-muted hover:text-red-400">{t.disconnect}</button>
+                    )}
+                    {walletMode === "agentic" && (
+                      <button onClick={() => { fetch(`${GATEWAY}/agentic/logout`, { method: "POST" }); setWallet(null); setWalletMode(null); setLoginStep("email"); setLoginEmail(""); setLoginCode(""); }} className="text-[10px] text-nexus-muted hover:text-red-400">{t.logout}</button>
                     )}
                     {session && (
                       <button onClick={() => signOut()} className="text-[10px] text-nexus-muted hover:text-red-400">{t.logout}</button>
@@ -803,7 +922,7 @@ export default function Dashboard() {
                       className="btn-secondary text-sm">{t.launchAnother}</button>
                   </div>
                 </div>
-              ) : walletMode !== "okx" || !wallet ? (
+              ) : (!wallet || (walletMode !== "okx" && walletMode !== "agentic")) ? (
                 /* Need wallet */
                 <div className="text-center py-12">
                   <div className="text-5xl mb-4">&#x1F680;</div>
