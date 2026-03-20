@@ -161,7 +161,18 @@ app.use((req, res, next) => {
 // ── Agentic Wallet (OnchainOS TEE wallet) ──
 function runOnchainos(args: string, timeoutMs = 30000): string {
   try {
-    const result = execSync(`onchainos ${args}`, { timeout: timeoutMs, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    const result = execSync(`onchainos ${args}`, {
+      timeout: timeoutMs, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        OKX_API_KEY: env.OKX_API_KEY || process.env.OKX_API_KEY || "",
+        OKX_SECRET_KEY: env.OKX_SECRET_KEY || process.env.OKX_SECRET_KEY || "",
+        OKX_PASSPHRASE: env.OKX_PASSPHRASE || process.env.OKX_PASSPHRASE || "",
+        // Use file-based keyring to avoid gnome-keyring dependency
+        KEYRING_BACKEND: "file",
+        XDG_RUNTIME_DIR: "/tmp",
+      },
+    });
     return result.trim();
   } catch (e: any) {
     const stderr = e.stderr?.toString().trim() || "";
@@ -183,6 +194,22 @@ function parseOnchainosJson(output: string): any {
 
 // Agentic Wallet session store: email → { accountId, addresses }
 const agenticSessions = new Map<string, { email: string; accountId?: string; addresses?: any; loggedIn: boolean }>();
+
+// Login with API Key (headless server compatible, no keyring needed)
+app.post("/agentic/apikey-login", async (_req, res) => {
+  try {
+    // onchainos wallet login with API key uses env vars automatically
+    const output = runOnchainos("wallet login");
+    res.json({ success: true, raw: output });
+  } catch (e: any) {
+    // If already logged in via API key
+    if (e.message.includes("already") || e.message.includes("logged")) {
+      res.json({ success: true, message: "Already logged in via API key" });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
 
 // Login with email — sends OTP
 app.post("/agentic/login", async (req, res) => {
