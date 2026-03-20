@@ -79,11 +79,28 @@ async function replyToTweet(tweetId: string, text: string) {
   }
 }
 
+let botUserId: string | undefined;
+let botUsername: string | undefined;
+
 async function pollMentions() {
   try {
-    const me = await client.v2.me();
-    const myId = me.data.id;
-    const myUsername = me.data.username;
+    if (!botUserId) {
+      const me = await client.v2.me();
+      botUserId = me.data.id;
+      botUsername = me.data.username;
+
+      // On first poll after restart, skip old mentions by fetching and marking latest
+      if (!lastMentionId) {
+        try {
+          const latest = await client.v2.userMentionTimeline(botUserId, { max_results: 5, "tweet.fields": ["author_id"] });
+          if (latest.data?.data?.length) {
+            lastMentionId = latest.data.data[0].id;
+            console.log(`[TwitterBot] Skipping old mentions, starting from ${lastMentionId}`);
+          }
+        } catch {}
+        return; // Skip this poll cycle, start fresh next time
+      }
+    }
 
     const params: any = {
       max_results: 10,
@@ -91,16 +108,16 @@ async function pollMentions() {
     };
     if (lastMentionId) params.since_id = lastMentionId;
 
-    const mentions = await client.v2.userMentionTimeline(myId, params);
+    const mentions = await client.v2.userMentionTimeline(botUserId, params);
     if (!mentions.data?.data?.length) return;
 
     const tweets = [...mentions.data.data].reverse();
 
     for (const tweet of tweets) {
       if (repliedTweets.has(tweet.id)) continue;
-      if (tweet.author_id === myId) continue;
+      if (tweet.author_id === botUserId) continue;
 
-      const message = tweet.text.replace(new RegExp(`@${myUsername}\\b`, "gi"), "").trim();
+      const message = tweet.text.replace(new RegExp(`@${botUsername}\\b`, "gi"), "").trim();
       if (!message) continue;
 
       console.log(`[TwitterBot] "${message.slice(0, 50)}..." (${tweet.id})`);
