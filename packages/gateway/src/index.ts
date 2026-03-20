@@ -1343,7 +1343,7 @@ app.post("/chat", async (req, res) => {
       max_tokens: 400,
       messages: [{
         role: "user",
-        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. IMPORTANT: Reply in the SAME language as the user's message — if the user wrote in English, reply in English; if Chinese, reply in Chinese. Use markdown tables and formatting. Focus on actionable insights. Keep it under 200 words.`,
+        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. IMPORTANT rules:\n1. Reply in the SAME language as the user's message.\n2. Use markdown tables and formatting. Focus on actionable insights.\n3. NEVER fabricate or estimate numbers that are not in the data. If market cap, price, or volume is missing or 0, say "data unavailable" instead of guessing.\n4. Keep it under 200 words.`,
       }],
     });
 
