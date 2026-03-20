@@ -162,28 +162,10 @@ async function pollMentions() {
         continue;
       }
 
-      // Trade requests → check session, execute or redirect
+      // Trade requests → redirect to Dashboard
       const isTradeRequest = /swap|buy|sell|trade|换|买|卖/i.test(message);
       if (isTradeRequest) {
-        const wallet = getLinkedWallet(tweet.author_id!);
-        if (!wallet) {
-          await replyToTweet(tweet.id, `Register first at ${SITE_URL} (Twitter login → create wallet → bind)`);
-        } else {
-          // Check session
-          let active = false;
-          try {
-            const resp = await fetch(`${GATEWAY_URL}/session/check/twitter/${tweet.author_id}`, { signal: AbortSignal.timeout(3000) });
-            const data = await resp.json() as any;
-            active = !!data.active;
-          } catch {}
-
-          if (active) {
-            const response = await askAgentNexus(message, tweet.author_id);
-            await replyToTweet(tweet.id, response);
-          } else {
-            await replyToTweet(tweet.id, `Wallet locked. Unlock at ${SITE_URL} first, then tweet again.`);
-          }
-        }
+        await replyToTweet(tweet.id, `Trading requires OKX Wallet signing. Please use our Dashboard:\n\n${SITE_URL}\n\nConnect OKX Wallet → chat "buy XDOG" → sign → done!`);
         repliedTweets.add(tweet.id);
         lastMentionId = tweet.id;
         await new Promise((r) => setTimeout(r, 2000));
