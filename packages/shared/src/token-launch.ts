@@ -120,8 +120,8 @@ export function buildAddLiquidityTx(p: {
     encodeInt256(887200n) +              // tickUpper
     encodeUint256(amount0) +
     encodeUint256(amount1) +
-    encodeUint256(0n) +                  // amount0Min
-    encodeUint256(0n) +                  // amount1Min
+    encodeUint256(amount0 * 95n / 100n) + // amount0Min (5% slippage protection)
+    encodeUint256(amount1 * 95n / 100n) + // amount1Min (5% slippage protection)
     p.from.replace("0x", "").toLowerCase().padStart(64, "0") +
     encodeUint256(deadline);
 

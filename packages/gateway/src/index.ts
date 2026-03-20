@@ -104,7 +104,14 @@ const RISK_URL = process.env.RISK_URL || "http://localhost:4003";
 const TRADER_URL = process.env.TRADER_URL || "http://localhost:4004";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://dashboard-production-fe35.up.railway.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // ── Shared session store: unlocked wallets with TTL ──
@@ -201,10 +208,19 @@ function setupKeyring() {
   }
 }
 
+/** Sanitize shell arguments */
+function sanitizeArg(arg: string): string {
+  return arg.replace(/[^a-zA-Z0-9._\-@:\/0x ]/g, "");
+}
+
+/** Sanitize error messages — don't leak server internals */
+function safeError(e: any): string {
+  const msg = e.message || "Internal error";
+  // Remove file paths and stack traces
+  return msg.replace(/\/[^\s]+/g, "[path]").replace(/at\s+.+/g, "").slice(0, 200);
+}
+
 function runOnchainos(args: string, timeoutMs = 30000): string {
-  if (args.includes("wallet")) {
-    console.log(`[Agentic] DBUS=${process.env.DBUS_SESSION_BUS_ADDRESS || "unset"} GNOME_KEYRING=${process.env.GNOME_KEYRING_CONTROL || "unset"}`);
-  }
   try {
     const result = execSync(`onchainos ${args}`, {
       timeout: timeoutMs, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
@@ -268,7 +284,8 @@ app.post("/agentic/login", async (req, res) => {
   setupKeyring();
 
   try {
-    const output = runOnchainos(`wallet login ${email} --locale zh-CN`);
+    const safeEmail = sanitizeArg(email);
+    const output = runOnchainos(`wallet login ${safeEmail} --locale zh-CN`);
     agenticSessions.set(email, { email, loggedIn: false });
     res.json({ success: true, message: "Verification code sent to email", email });
   } catch (e: any) {
@@ -289,7 +306,8 @@ app.post("/agentic/verify", async (req, res) => {
   setupKeyring();
 
   try {
-    const output = runOnchainos(`wallet verify ${code}`);
+    const safeCode = sanitizeArg(code);
+    const output = runOnchainos(`wallet verify ${safeCode}`);
     const session = agenticSessions.get(email) || { email, loggedIn: false, addresses: undefined as any };
     session.loggedIn = true;
     agenticSessions.set(email, session);
@@ -348,10 +366,14 @@ app.get("/agentic/balance", (_req, res) => {
 app.post("/agentic/send", async (req, res) => {
   const { chain, to, amount, token_address } = req.body;
   if (!to || !amount) return res.status(400).json({ error: "to and amount required" });
+  // Validate inputs
+  if (to && !/^0x[a-fA-F0-9]{40}$/.test(to)) return res.status(400).json({ error: "invalid to address" });
+  if (token_address && !/^0x[a-fA-F0-9]{40}$/.test(token_address)) return res.status(400).json({ error: "invalid token address" });
+  if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return res.status(400).json({ error: "invalid amount" });
 
-  const chainId = chain || "196";
-  let cmd = `wallet send --chain ${chainId} --amount "${amount}"`;
-  if (token_address) cmd += ` --contract-token ${token_address}`;
+  const chainId = sanitizeArg(chain || "196");
+  let cmd = `wallet send --chain ${chainId} --amount "${sanitizeArg(amount)}"`;
+  if (token_address) cmd += ` --contract-token ${sanitizeArg(token_address)}`;
 
   // Note: onchainos wallet send may need --force to skip confirmation
   try {
@@ -369,8 +391,10 @@ app.post("/agentic/x402-pay", async (req, res) => {
     return res.status(400).json({ error: "amount, pay_to, asset required" });
   }
 
-  let cmd = `payment x402-pay --network ${network || "eip155:196"} --amount ${amount} --pay-to ${pay_to} --asset ${asset}`;
-  if (from) cmd += ` --from ${from}`;
+  if (pay_to && !/^0x[a-fA-F0-9]{40}$/.test(pay_to)) return res.status(400).json({ error: "invalid pay_to address" });
+  if (asset && !/^0x[a-fA-F0-9]{40}$/.test(asset)) return res.status(400).json({ error: "invalid asset address" });
+  let cmd = `payment x402-pay --network ${sanitizeArg(network || "eip155:196")} --amount ${sanitizeArg(amount)} --pay-to ${sanitizeArg(pay_to)} --asset ${sanitizeArg(asset)}`;
+  if (from) cmd += ` --from ${sanitizeArg(from)}`;
 
   try {
     const output = runOnchainos(cmd, 30000);
@@ -834,8 +858,12 @@ app.post("/chats/save", (req, res) => {
   res.json({ success: true });
 });
 
-// Load chat history
+// Load chat history (require matching wallet header)
 app.get("/chats/load/:userId", (req, res) => {
+  const caller = req.headers["x-wallet-address"] as string;
+  if (caller?.toLowerCase() !== req.params.userId.toLowerCase()) {
+    return res.status(403).json({ error: "forbidden" });
+  }
   const data = chatStore[req.params.userId];
   res.json({ chats: data?.chats || null, updated: data?.updated || null });
 });
@@ -916,8 +944,12 @@ app.get("/wallet-stats", (_req, res) => {
 
 // ── x402 Credits API ──
 
-// Admin: reset daily usage (for testing)
+// Admin: reset daily usage (protected by admin key)
 app.post("/credits/reset/:walletAddress", (req, res) => {
+  const adminKey = req.headers["x-admin-key"] as string;
+  if (adminKey !== (process.env.ADMIN_KEY || "nexus-admin-2026")) {
+    return res.status(403).json({ error: "forbidden" });
+  }
   const user = getUserCredits(req.params.walletAddress);
   user.dailyUsage = 0;
   user.dailyDate = getToday();

@@ -66,13 +66,25 @@ async function okxFetch(apiPath: string, method: string = "GET", body?: any): Pr
  * Run onchainos command — tries CLI first, falls back to OKX HTTP API.
  * This ensures it works both locally (with CLI) and on Railway (without CLI).
  */
+/** Sanitize input to prevent shell injection */
+function sanitizeShellArg(arg: string): string {
+  // Only allow alphanumeric, hex addresses, dots, dashes, underscores, @ and spaces
+  return arg.replace(/[^a-zA-Z0-9._\-@:\/0x ]/g, "");
+}
+
 export function runOnchainos(command: string): string {
+  // Sanitize the command to prevent injection
+  const sanitized = command.split(/\s+/).map(part => {
+    if (part.startsWith("--")) return part; // flags are safe
+    return sanitizeShellArg(part);
+  }).join(" ");
+
   // Try CLI first
   try {
     const envPath = process.env.PATH || "";
     const fullPath = `${ONCHAINOS_PATHS}:${envPath}`;
 
-    const result = execSync(`onchainos ${command}`, {
+    const result = execSync(`onchainos ${sanitized}`, {
       encoding: "utf-8",
       timeout: 30000,
       env: { ...process.env, PATH: fullPath },
