@@ -65,8 +65,23 @@ function splitForTweets(text: string, maxLen = 270): string[] {
   return chunks;
 }
 
+/** Strip markdown for Twitter — tables, headers, bold etc don't render */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s*/g, "")           // headers
+    .replace(/\*\*(.*?)\*\*/g, "$1")     // bold
+    .replace(/\*(.*?)\*/g, "$1")         // italic
+    .replace(/\|[^\n]*\|/g, "")          // table rows
+    .replace(/\|-+\|/g, "")             // table separators
+    .replace(/```[^`]*```/g, "")         // code blocks
+    .replace(/`([^`]*)`/g, "$1")         // inline code
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links
+    .replace(/\n{3,}/g, "\n\n")          // excessive newlines
+    .trim();
+}
+
 async function replyToTweet(tweetId: string, text: string) {
-  const chunks = splitForTweets(text);
+  const chunks = splitForTweets(stripMarkdown(text));
   let replyTo = tweetId;
   for (const chunk of chunks) {
     try {
