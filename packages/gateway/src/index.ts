@@ -1302,7 +1302,7 @@ app.post("/chat", async (req, res) => {
       max_tokens: 400,
       messages: [{
         role: "user",
-        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary in the user's language (Chinese if they wrote Chinese, English otherwise). Focus on actionable insights. Keep it under 200 words.`,
+        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. IMPORTANT: Reply in the SAME language as the user's message — if the user wrote in English, reply in English; if Chinese, reply in Chinese. Use markdown tables and formatting. Focus on actionable insights. Keep it under 200 words.`,
       }],
     });
 
