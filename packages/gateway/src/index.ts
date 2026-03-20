@@ -164,22 +164,35 @@ let keyringReady = false;
 function setupKeyring() {
   if (keyringReady) return;
   try {
-    // Install gnome-keyring if missing
-    execSync("which gnome-keyring-daemon || (apt-get update -qq && apt-get install -y -qq gnome-keyring dbus-x11 2>/dev/null)", {
-      timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+    // Install gnome-keyring + dbus if missing
+    execSync("which gnome-keyring-daemon 2>/dev/null || (apt-get update -qq && apt-get install -y -qq gnome-keyring dbus-x11 libsecret-1-0 2>/dev/null) || true", {
+      timeout: 120000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
     });
-    // Start dbus and unlock keyring with empty password
+    // Start dbus session
     try {
-      const dbusOut = execSync("dbus-launch", { timeout: 5000, encoding: "utf-8" });
-      const busAddr = dbusOut.match(/DBUS_SESSION_BUS_ADDRESS=(.+)/)?.[1];
-      if (busAddr) process.env.DBUS_SESSION_BUS_ADDRESS = busAddr;
-    } catch {}
+      const dbusOut = execSync("dbus-launch --sh-syntax", { timeout: 5000, encoding: "utf-8" });
+      const busAddr = dbusOut.match(/DBUS_SESSION_BUS_ADDRESS='([^']+)'/)?.[1] || dbusOut.match(/DBUS_SESSION_BUS_ADDRESS=([^\s;]+)/)?.[1];
+      if (busAddr) {
+        process.env.DBUS_SESSION_BUS_ADDRESS = busAddr;
+        console.log("[Agentic] D-Bus started:", busAddr);
+      }
+      const busPid = dbusOut.match(/DBUS_SESSION_BUS_PID=(\d+)/)?.[1];
+      if (busPid) process.env.DBUS_SESSION_BUS_PID = busPid;
+    } catch (e: any) {
+      console.warn("[Agentic] D-Bus launch failed:", e.message);
+    }
+    // Start and unlock gnome-keyring-daemon
     try {
-      execSync('echo "" | gnome-keyring-daemon --unlock --components=secrets 2>/dev/null || true', {
-        timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+      const krOut = execSync('echo -n "" | gnome-keyring-daemon --start --unlock --components=secrets 2>&1 || true', {
+        timeout: 10000, encoding: "utf-8",
         env: process.env,
       });
-    } catch {}
+      const krSocket = krOut.match(/GNOME_KEYRING_CONTROL=(.+)/)?.[1];
+      if (krSocket) process.env.GNOME_KEYRING_CONTROL = krSocket;
+      console.log("[Agentic] Keyring daemon started");
+    } catch (e: any) {
+      console.warn("[Agentic] Keyring daemon failed:", e.message);
+    }
     keyringReady = true;
     console.log("[Agentic] Keyring setup complete");
   } catch (e: any) {
@@ -197,9 +210,8 @@ function runOnchainos(args: string, timeoutMs = 30000): string {
         OKX_API_KEY: env.OKX_API_KEY || process.env.OKX_API_KEY || "",
         OKX_SECRET_KEY: env.OKX_SECRET_KEY || process.env.OKX_SECRET_KEY || "",
         OKX_PASSPHRASE: env.OKX_PASSPHRASE || process.env.OKX_PASSPHRASE || "",
-        // Use file-based keyring to avoid gnome-keyring dependency
-        KEYRING_BACKEND: "file",
-        XDG_RUNTIME_DIR: "/tmp",
+        HOME: process.env.HOME || "/root",
+        XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || "/tmp",
       },
     });
     return result.trim();
