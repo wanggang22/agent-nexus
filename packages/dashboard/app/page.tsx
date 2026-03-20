@@ -646,45 +646,15 @@ export default function Dashboard() {
           <p className="text-nexus-muted text-sm mb-8">{t.heroDesc}</p>
 
           <div className="space-y-3">
-            {/* Agentic Wallet: Email Login (primary) */}
-            <div className="card !p-4 space-y-3 text-left">
-              {loginStep === "email" ? (
-                <>
-                  <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
-                    className="input w-full" placeholder={t.emailPlaceholder} disabled={loginLoading} />
-                  <button onClick={handleEmailLogin} disabled={loginLoading || !loginEmail}
-                    className="btn-primary w-full disabled:opacity-40">
-                    {loginLoading ? "..." : t.sendCode}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs text-nexus-green">{t.codeSent}</p>
-                  <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleVerifyCode()}
-                    className="input w-full" placeholder={t.codePlaceholder} disabled={loginLoading} autoFocus />
-                  <button onClick={handleVerifyCode} disabled={loginLoading || !loginCode}
-                    className="btn-primary w-full disabled:opacity-40">
-                    {loginLoading ? "..." : t.verifyCode}
-                  </button>
-                  <button onClick={() => setLoginStep("email")} className="text-xs text-nexus-muted hover:text-white w-full text-center">
-                    {lang === "zh" ? "换邮箱" : "Change email"}
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3 text-nexus-muted text-xs">
-              <div className="flex-1 h-px bg-nexus-border" />
-              <span>{lang === "zh" ? "或" : "or"}</span>
-              <div className="flex-1 h-px bg-nexus-border" />
-            </div>
-
-            {/* OKX Wallet (secondary) */}
-            <button onClick={handleConnectOKX} className="btn-secondary w-full flex items-center justify-center gap-2">
+            <button onClick={handleConnectOKX} className="btn-primary w-full flex items-center justify-center gap-2">
               <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-[10px] font-bold">OKX</span>
               {t.connectOKX}
+            </button>
+            <button onClick={() => signIn("twitter")} className="btn-secondary w-full flex items-center justify-center gap-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+              {t.loginX}
             </button>
           </div>
 
