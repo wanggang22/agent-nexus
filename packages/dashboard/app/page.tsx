@@ -722,17 +722,26 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto">
               {!activeChat || activeChat.messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-nexus-accent to-nexus-green flex items-center justify-center mb-4 shadow-lg shadow-nexus-accent/20">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                    </svg>
+                  </div>
                   <h2 className="text-2xl font-bold text-gradient mb-2">{t.heroTitle}</h2>
                   <p className="text-nexus-muted text-sm mb-8 max-w-md">{t.heroDesc}</p>
                   <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
                     {[
-                      lang === "zh" ? "XDOG 怎么样？" : "How is XDOG doing?",
-                      lang === "zh" ? "帮我找市值低于 10 万的代币" : "Find tokens with mcap under $100k",
-                      lang === "zh" ? "用 0.1 OKB 买 SEED" : "Buy SEED with 0.1 OKB",
-                      lang === "zh" ? "发一个叫 MOON 的币" : "Launch a token called MOON",
+                      { icon: "📊", text: lang === "zh" ? "XDOG 怎么样？" : "How is XDOG doing?" },
+                      { icon: "🔍", text: lang === "zh" ? "帮我找低市值潜力币" : "Find low mcap gems" },
+                      { icon: "💱", text: lang === "zh" ? "用 0.1 OKB 买 SEED" : "Buy SEED with 0.1 OKB" },
+                      { icon: "🚀", text: lang === "zh" ? "发一个叫 MOON 的币" : "Launch a token called MOON" },
+                      { icon: "🐋", text: lang === "zh" ? "聪明钱在买什么？" : "What is smart money buying?" },
+                      { icon: "🛡️", text: lang === "zh" ? "这个币安全吗 SEED" : "Is SEED safe?" },
                     ].map((q, i) => (
-                      <button key={i} onClick={() => { setChatInput(q); }}
-                        className="card text-left text-xs text-nexus-muted hover:text-white p-3 !rounded-xl">{q}</button>
+                      <button key={i} onClick={() => { setChatInput(q.text); }}
+                        className="card text-left text-xs text-nexus-muted hover:text-white hover:border-nexus-accent/30 p-3 !rounded-xl transition-colors">
+                        <span className="mr-1.5">{q.icon}</span>{q.text}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -900,7 +909,9 @@ export default function Dashboard() {
                           {s.results.map((r, i) => (
                             <div key={i} className="card">
                               <div className="text-xs text-nexus-muted mb-1">Result #{i + 1}</div>
-                              <div className="text-sm text-white whitespace-pre-wrap">{r}</div>
+                              <div className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{r}</ReactMarkdown>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -932,9 +943,26 @@ export default function Dashboard() {
                       className="btn-primary w-full text-sm disabled:opacity-40">{t.saveStrategy}</button>
                   </div>
 
-                  {strategies.length === 0 && (
-                    <div className="text-center text-nexus-muted text-sm mt-8">{t.noStrategies}</div>
-                  )}
+                  {/* Strategy Templates */}
+                  <div className="mt-6">
+                    <div className="text-[10px] text-nexus-muted uppercase tracking-widest mb-3">
+                      {lang === "zh" ? "快速模板" : "Quick Templates"}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { name: lang === "zh" ? "低市值新币" : "Low Mcap Gems", desc: lang === "zh" ? "找X Layer上市值低于10万美元、持有人数大于50的代币" : "Find tokens on X Layer with mcap under $100k and more than 50 holders" },
+                        { name: lang === "zh" ? "聪明钱跟踪" : "Smart Money Tracker", desc: lang === "zh" ? "监控聪明钱最近买入的代币，筛选买入金额大于500美元的" : "Track smart money buys over $500 on X Layer" },
+                        { name: lang === "zh" ? "鲸鱼异动" : "Whale Alerts", desc: lang === "zh" ? "监控X Layer上大额转账和鲸鱼钱包异动" : "Monitor large transfers and whale wallet movements on X Layer" },
+                        { name: lang === "zh" ? "Meme 热度监控" : "Meme Hype Monitor", desc: lang === "zh" ? "找X Layer上24小时交易量增长最快的meme代币" : "Find meme tokens with fastest 24h volume growth on X Layer" },
+                      ].map((tpl, i) => (
+                        <button key={i} onClick={() => { setStrategyName(tpl.name); setStrategyInput(tpl.desc); }}
+                          className="card !p-3 text-left hover:border-nexus-accent/30 transition-colors">
+                          <div className="text-xs text-white font-medium">{tpl.name}</div>
+                          <div className="text-[10px] text-nexus-muted mt-0.5">{tpl.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
             </div>
