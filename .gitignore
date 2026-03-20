@@ -10,3 +10,4 @@ typechain-types/
 .next/
 *.tmp
 .user-wallets.json
+docs/
