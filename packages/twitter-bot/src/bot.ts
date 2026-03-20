@@ -73,7 +73,7 @@ async function replyToTweet(tweetId: string, text: string) {
       const posted = await client.v2.reply(chunk, replyTo);
       replyTo = posted.data.id;
     } catch (e: any) {
-      console.error(`[TwitterBot] Failed to reply: ${e.message}`);
+      console.error(`[TwitterBot] Failed to reply: ${e.message}`, e.data ? JSON.stringify(e.data) : "", e.code || "");
       break;
     }
   }
