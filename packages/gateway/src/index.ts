@@ -916,6 +916,15 @@ app.get("/wallet-stats", (_req, res) => {
 
 // ── x402 Credits API ──
 
+// Admin: reset daily usage (for testing)
+app.post("/credits/reset/:walletAddress", (req, res) => {
+  const user = getUserCredits(req.params.walletAddress);
+  user.dailyUsage = 0;
+  user.dailyDate = getToday();
+  saveCreditsStore();
+  res.json({ success: true, freeRemaining: FREE_DAILY_LIMIT });
+});
+
 // Get user's credit balance and daily usage
 app.get("/credits/:walletAddress", (req, res) => {
   const user = getUserCredits(req.params.walletAddress);
