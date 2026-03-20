@@ -229,12 +229,7 @@ export default function Dashboard() {
       setCredits(result.totalCredits);
       setFreeRemaining(0);
       setShowPayment(false);
-
-      // Retry the original action
-      if (pendingRetry) {
-        setPendingRetry(null);
-        pendingRetry();
-      }
+      setPendingRetry(null);
     } catch (e: any) {
       alert(`Payment failed: ${e.message}`);
     } finally {
