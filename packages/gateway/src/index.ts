@@ -37,6 +37,7 @@ app.use(cors({
   ],
   credentials: true,
 }));
+app.set("trust proxy", 1); // Trust Railway's proxy for real client IP
 app.use(express.json());
 
 // Rate limiting — 1 request per minute per IP for all AI endpoints
