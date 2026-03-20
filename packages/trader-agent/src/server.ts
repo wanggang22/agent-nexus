@@ -1,6 +1,13 @@
 import express from "express";
 import cors from "cors";
-import { env, recordCall, requestLogger, setupGracefulShutdown } from "shared";
+import { env, recordCall, requestLogger, setupGracefulShutdown, resolveToken } from "shared";
+
+/** Resolve symbol to address if needed */
+function resolveAddr(token: string, chain = "xlayer"): string {
+  if (/^0x[a-fA-F0-9]{40}$/.test(token)) return token;
+  const resolved = resolveToken(token, chain);
+  return resolved?.address || token;
+}
 import { getQuote, buildTrade, executeTrade, getOrderStatus, getWalletAddress, getApproval, getGasPrice, getLiquiditySources, estimateGasLimit, broadcastTx, trackBroadcastOrder } from "./executor.js";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -28,7 +35,9 @@ app.post("/trade/quote", async (req, res) => {
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const quote = await getQuote(from_token, to_token, amount, chain, slippage);
+    const resolvedFrom = resolveAddr(from_token, chain);
+    const resolvedTo = resolveAddr(to_token, chain);
+    const quote = await getQuote(resolvedFrom, resolvedTo, amount, chain, slippage);
     recordCall(AGENT, "quote", 0);
     res.json(quote);
   } catch (e: any) {
@@ -43,7 +52,7 @@ app.post("/trade/build", async (req, res) => {
     if (!from_token || !to_token || !amount || !wallet_address) {
       return res.status(400).json({ error: "from_token, to_token, amount, and wallet_address required" });
     }
-    const result = await buildTrade(from_token, to_token, amount, wallet_address, chain, slippage);
+    const result = await buildTrade(resolveAddr(from_token, chain), resolveAddr(to_token, chain), amount, wallet_address, chain, slippage);
     recordCall(AGENT, "build", 0);
     res.json(result);
   } catch (e: any) {
@@ -58,7 +67,7 @@ app.post("/trade/execute", async (req, res) => {
     if (!from_token || !to_token || !amount) {
       return res.status(400).json({ error: "from_token, to_token, and amount required" });
     }
-    const result = await executeTrade(from_token, to_token, amount, chain, slippage);
+    const result = await executeTrade(resolveAddr(from_token, chain), resolveAddr(to_token, chain), amount, chain, slippage);
     recordCall(AGENT, "execute", 0);
     res.json(result);
   } catch (e: any) {
