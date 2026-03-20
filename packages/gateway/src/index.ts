@@ -159,6 +159,35 @@ app.use((req, res, next) => {
 });
 
 // ── Agentic Wallet (OnchainOS TEE wallet) ──
+// Setup keyring on headless server (run once at startup)
+let keyringReady = false;
+function setupKeyring() {
+  if (keyringReady) return;
+  try {
+    // Install gnome-keyring if missing
+    execSync("which gnome-keyring-daemon || (apt-get update -qq && apt-get install -y -qq gnome-keyring dbus-x11 2>/dev/null)", {
+      timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+    });
+    // Start dbus and unlock keyring with empty password
+    try {
+      const dbusOut = execSync("dbus-launch", { timeout: 5000, encoding: "utf-8" });
+      const busAddr = dbusOut.match(/DBUS_SESSION_BUS_ADDRESS=(.+)/)?.[1];
+      if (busAddr) process.env.DBUS_SESSION_BUS_ADDRESS = busAddr;
+    } catch {}
+    try {
+      execSync('echo "" | gnome-keyring-daemon --unlock --components=secrets 2>/dev/null || true', {
+        timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+        env: process.env,
+      });
+    } catch {}
+    keyringReady = true;
+    console.log("[Agentic] Keyring setup complete");
+  } catch (e: any) {
+    console.warn("[Agentic] Keyring setup failed:", e.message);
+    keyringReady = true; // Don't retry
+  }
+}
+
 function runOnchainos(args: string, timeoutMs = 30000): string {
   try {
     const result = execSync(`onchainos ${args}`, {
@@ -197,6 +226,7 @@ const agenticSessions = new Map<string, { email: string; accountId?: string; add
 
 // Login with API Key (headless server compatible, no keyring needed)
 app.post("/agentic/apikey-login", async (_req, res) => {
+  setupKeyring();
   try {
     // onchainos wallet login with API key uses env vars automatically
     const output = runOnchainos("wallet login");
@@ -215,6 +245,7 @@ app.post("/agentic/apikey-login", async (_req, res) => {
 app.post("/agentic/login", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "email required" });
+  setupKeyring();
 
   try {
     const output = runOnchainos(`wallet login ${email} --locale zh-CN`);
@@ -235,6 +266,7 @@ app.post("/agentic/login", async (req, res) => {
 app.post("/agentic/verify", async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) return res.status(400).json({ error: "email and code required" });
+  setupKeyring();
 
   try {
     const output = runOnchainos(`wallet verify ${code}`);
