@@ -561,7 +561,7 @@ Rules:
 - For "swap", "buy", "sell", "trade", "换", "买", "卖" → trader/quote
 - For "gas", "手续费" → trade/gas
 - For "portfolio risk", "持仓风险" → risk/portfolio
-- For "launch", "deploy", "create token", "发币", "发射", "创建代币", "上线代币" → use agent "launch", method POST, path "/launch", body {name, symbol, totalSupply, okbForLiquidity}. Extract token name/symbol/supply from user message. Default: 1B supply, 0.1 OKB liquidity.
+- For "launch", "deploy", "create token", "发币", "发射", "创建代币", "上线代币", "发一个币", "发个币", "做一个币", "造币", "铸币", "mint token" → use agent "launch", method POST, path "/launch", body {name, symbol, totalSupply, okbForLiquidity}. Extract token name/symbol/supply from user message. Default: 1B supply, 0.1 OKB liquidity. IMPORTANT: if user says "发一个叫X的币" or "create a token called X", this is a LAUNCH intent, not a query.
 - For "strategy", "策略", "monitor", "监控", "watch", "盯", "filter", "筛选", "alert", "提醒", "notify", "通知", "开个策略", "建个策略", "自动" → use agent "strategy", method POST, path "/strategies", body {name, description}. Extract strategy name and filter description from user message. The description should be the user's natural language filter criteria.
 - Default chain: xlayer.
 - Max 3 calls. If user wants comprehensive view, combine risk + analyst.
