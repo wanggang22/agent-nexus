@@ -70,7 +70,7 @@ async function replyToTweet(tweetId: string, text: string) {
   let replyTo = tweetId;
   for (const chunk of chunks) {
     try {
-      const posted = await client.v2.reply(chunk, replyTo);
+      const posted = await client.v2.tweet({ text: chunk, reply: { in_reply_to_tweet_id: replyTo } });
       replyTo = posted.data.id;
     } catch (e: any) {
       console.error(`[TwitterBot] Failed to reply: ${e.message}`, e.data ? JSON.stringify(e.data) : "", e.code || "");
