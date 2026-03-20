@@ -161,13 +161,19 @@ export default function Dashboard() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [pendingRetry, setPendingRetry] = useState<(() => void) | null>(null);
 
-  // Fetch credits on wallet connect
-  useEffect(() => {
+  // Fetch credits on wallet connect + refresh every 30s
+  const refreshCredits = () => {
     if (!wallet) return;
     fetch(`${GATEWAY}/credits/${wallet}`).then(r => r.json()).then(data => {
       setCredits(data.credits || 0);
       setFreeRemaining(data.freeRemaining ?? 10);
     }).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshCredits();
+    const interval = setInterval(refreshCredits, 30000);
+    return () => clearInterval(interval);
   }, [wallet]);
 
   // Handle 402 Payment Required
@@ -695,9 +701,11 @@ export default function Dashboard() {
                 <>
                   <div className="flex items-center gap-2 mt-1.5">
                     <span className="text-[10px] text-nexus-accent-light">
-                      {freeRemaining > 0 ? `${freeRemaining} ${t.freeActions}` : `${credits} ${t.creditsLeft}`}
+                      {freeRemaining > 0 ? `${freeRemaining} ${t.freeActions}` : ""}
+                      {credits > 0 ? `${freeRemaining > 0 ? " + " : ""}${credits} ${t.creditsLeft}` : ""}
+                      {freeRemaining === 0 && credits === 0 ? (lang === "zh" ? "额度已用完" : "No credits") : ""}
                     </span>
-                    {freeRemaining === 0 && credits < 5 && (
+                    {credits < 5 && (
                       <button onClick={() => setShowPayment(true)} className="text-[10px] text-nexus-green hover:underline">
                         {lang === "zh" ? "充值" : "Buy"}
                       </button>
