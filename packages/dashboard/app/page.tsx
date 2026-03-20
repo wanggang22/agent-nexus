@@ -294,6 +294,13 @@ export default function Dashboard() {
         return;
       }
 
+      // Rate limit: show payment modal to upgrade
+      if (resp.status === 429) {
+        handle402({ creditsRemaining: 0, freeUsed: 10, freeLimit: 10 }, () => { setChatInput(msg); handleSend(); });
+        setChatLoading(false);
+        return;
+      }
+
       const data = await resp.json();
 
       // Update credits info from response

@@ -40,15 +40,42 @@ app.use(cors({
 app.set("trust proxy", 1); // Trust Railway's proxy for real client IP
 app.use(express.json());
 
-// Rate limiting — 1 request per minute per IP for all AI endpoints
+// Rate limiting — 1 request per minute per IP for free users, unlimited for paid
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 1,
-  message: { error: "Rate limit exceeded. Max 1 request per minute.", retry_after: 60 },
+  message: {
+    error: "Rate limit exceeded. Max 1 request per minute for free users.",
+    upgrade: "Purchase credits ($1 USDC = 100 requests) to remove rate limit.",
+    retry_after: 60,
+  },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip || req.headers["x-forwarded-for"] as string || "unknown",
+  skip: (req) => {
+    // Paid users (have credits) skip rate limit, deduct 1 credit per request
+    const wallet = req.body?.wallet_address || req.headers["x-wallet-address"] as string;
+    if (!wallet) return false;
+    const key = wallet.toLowerCase();
+    const user = creditsStoreRef[key];
+    if (user && user.credits > 0) {
+      user.credits--;
+      saveCreditsStoreRef();
+      return true; // skip rate limit
+    }
+    // Also skip if within free daily limit
+    if (user) {
+      const today = new Date().toISOString().split("T")[0];
+      if (user.dailyDate !== today) { user.dailyUsage = 0; user.dailyDate = today; }
+      if (user.dailyUsage < 10) return true;
+    }
+    return false;
+  },
 });
+// Refs to credits store (set after initialization below)
+let creditsStoreRef: Record<string, any> = {};
+let saveCreditsStoreRef: () => void = () => {};
+
 // Apply to all endpoints that call Claude AI or onchainos
 app.use("/chat", aiLimiter);
 app.use("/signals", aiLimiter);
@@ -696,6 +723,10 @@ function saveCreditsStore() {
     console.error("[Credits] Save failed:", e.message);
   }
 }
+
+// Connect rate limiter refs to credits store
+creditsStoreRef = creditsStore;
+saveCreditsStoreRef = saveCreditsStore;
 
 function getToday(): string {
   return new Date().toISOString().split("T")[0];
