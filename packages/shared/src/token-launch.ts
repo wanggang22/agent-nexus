@@ -10,9 +10,9 @@
 
 // ── Addresses on X Layer ──
 export const XLAYER_WOKB = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
-export const UNISWAP_V3_FACTORY = "0xb76c7abd3eb4b07ec14c5d7f9b265e8d37432e11";
-export const UNISWAP_V3_NFPM = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
-export const LAUNCH_FACTORY = "0xce4548490d48e7e11debc342b14dbb18a57c63e3";
+export const UNISWAP_V3_FACTORY = "0x4b2ab38dbf28d31d467aa8993f6c2585981d6804";
+export const UNISWAP_V3_NFPM = "0x315e413a11ab0df498ef83873012430ca36638ae";
+export const LAUNCH_FACTORY = "0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a";
 export const XLAYER_RPC = "https://rpc.xlayer.tech";
 export const XLAYER_CHAIN_ID_HEX = "0xc4";
 

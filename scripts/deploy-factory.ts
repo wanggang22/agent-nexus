@@ -13,7 +13,7 @@ const xlayer = defineChain({
   rpcUrls: { default: { http: ["https://rpc.xlayer.tech"] } },
 });
 
-const NFPM = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
+const NFPM = "0x315e413a11ab0df498ef83873012430ca36638ae"; // Official Uniswap V3 on X Layer
 const WOKB = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
 
 async function main() {

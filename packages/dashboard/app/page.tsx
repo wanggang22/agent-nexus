@@ -499,7 +499,7 @@ export default function Dashboard() {
   };
 
   // ── Collect LP fees via factory ──
-  const FACTORY_ADDRESS = "0xce4548490d48e7e11debc342b14dbb18a57c63e3";
+  const FACTORY_ADDRESS = "0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a";
   const handleCollectFees = async (tokenId: string) => {
     if (!wallet || walletMode !== "okx") return;
     const provider = (window as any).okxwallet;
