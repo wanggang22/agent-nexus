@@ -78,7 +78,7 @@ const Icon = ({ d, cls = "w-5 h-5" }: { d: string; cls?: string }) => (
 // ── Types ──
 interface ChatMessage { role: "user" | "ai"; text: string }
 interface ChatThread { id: string; title: string; messages: ChatMessage[]; createdAt: number }
-interface LaunchRecord { id: string; name: string; symbol: string; address?: string; status: "draft" | "launching" | "live"; createdAt: number }
+interface LaunchRecord { id: string; name: string; symbol: string; address?: string; tokenId?: string; status: "draft" | "launching" | "live"; createdAt: number }
 interface Strategy { id: string; name: string; description: string; status: "running" | "paused"; results: string[]; createdAt: number }
 
 export default function Dashboard() {
@@ -451,6 +451,7 @@ export default function Dashboard() {
       if (!provider) throw new Error("OKX Wallet not found");
 
       let deployedAddress = plan.predictedAddress;
+      let lpTokenId = "";
 
       for (let i = 0; i < plan.transactions.length; i++) {
         setLaunchStep(i + 1);
@@ -466,12 +467,21 @@ export default function Dashboard() {
           const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
           if (receipt) {
             if (step === "deploy" && receipt.contractAddress) deployedAddress = receipt.contractAddress;
+            // Extract LP tokenId from addLiquidity logs (Transfer event from NFPM)
+            if (step === "addLiquidity" && receipt.logs) {
+              for (const log of receipt.logs) {
+                // ERC721 Transfer(address,address,uint256) = 0xddf252ad...
+                if (log.topics?.[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" && log.topics?.length === 4) {
+                  lpTokenId = BigInt(log.topics[3]).toString();
+                }
+              }
+            }
             break;
           }
         }
       }
 
-      setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, address: deployedAddress, status: "live" as const } : l));
+      setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, address: deployedAddress, tokenId: lpTokenId, status: "live" as const } : l));
       setLaunchTradeUrl(plan.tradeUrl || "");
       setLaunchName(""); setLaunchSymbol("");
     } catch (e: any) {
@@ -479,6 +489,30 @@ export default function Dashboard() {
       alert(`Launch failed: ${e.message}`);
     } finally {
       setLaunchLoading(false);
+    }
+  };
+
+  // ── Collect LP fees ──
+  const NFPM_ADDRESS = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
+  const handleCollectFees = async (tokenId: string) => {
+    if (!wallet || walletMode !== "okx") return;
+    const provider = (window as any).okxwallet;
+    if (!provider) return;
+    try {
+      const MAX_UINT128 = "0x" + "f".repeat(32); // max uint128
+      // collect((uint256,address,uint128,uint128)) = 0xfc6f7865
+      const data = "0xfc6f7865" +
+        BigInt(tokenId).toString(16).padStart(64, "0") +
+        wallet.replace("0x", "").toLowerCase().padStart(64, "0") +
+        MAX_UINT128.replace("0x", "").padStart(64, "0") +
+        MAX_UINT128.replace("0x", "").padStart(64, "0");
+      const txHash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [{ from: wallet, to: NFPM_ADDRESS, data, value: "0x0", chainId: "0xc4", gas: "0x30000" }],
+      });
+      alert(lang === "zh" ? `手续费提取交易已发送: ${txHash}` : `Fees collected! TX: ${txHash}`);
+    } catch (e: any) {
+      alert(`Collect failed: ${e.message}`);
     }
   };
 
@@ -838,6 +872,12 @@ export default function Dashboard() {
                          className="btn-primary text-sm bg-nexus-accent hover:bg-nexus-accent/85">
                         {lang === "zh" ? "在 OKX DEX 交易" : "Trade on OKX DEX"} &#x2197;
                       </a>
+                    )}
+                    {activeLaunch.tokenId && (
+                      <button onClick={() => handleCollectFees(activeLaunch.tokenId!)}
+                        className="btn-secondary text-sm">
+                        {lang === "zh" ? "提取手续费" : "Collect Fees"}
+                      </button>
                     )}
                   </div>
                 </div>
