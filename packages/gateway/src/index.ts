@@ -1330,12 +1330,17 @@ app.post("/chat", async (req, res) => {
       ? `\nResolved tokens: ${Object.entries(resolvedTokens).map(([s, a]) => `${s} → ${a}`).join(", ")}`
       : "";
 
+    const isTwitter = (req.body as any).format === "twitter";
+    const formatRules = isTwitter
+      ? `IMPORTANT: This reply will be posted on Twitter (max 270 chars per tweet).\n1. Reply in the SAME language as the user.\n2. Use PLAIN TEXT only — NO markdown, NO tables, NO headers, NO bold/italic.\n3. Use emojis for visual structure.\n4. Include key numbers: price, market cap, holders, liquidity.\n5. Include contract address if available.\n6. NEVER fabricate numbers. If data is 0 or missing, say "data unavailable".\n7. Keep it under 250 characters if possible, max 500.`
+      : `IMPORTANT rules:\n1. Reply in the SAME language as the user's message.\n2. Use markdown tables and formatting. Focus on actionable insights.\n3. NEVER fabricate or estimate numbers that are not in the data. If market cap, price, or volume is missing or 0, say "data unavailable" instead of guessing.\n4. Keep it under 200 words.`;
+
     const summaryMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 400,
+      max_tokens: isTwitter ? 200 : 400,
       messages: [{
         role: "user",
-        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. IMPORTANT rules:\n1. Reply in the SAME language as the user's message.\n2. Use markdown tables and formatting. Focus on actionable insights.\n3. NEVER fabricate or estimate numbers that are not in the data. If market cap, price, or volume is missing or 0, say "data unavailable" instead of guessing.\n4. Keep it under 200 words.`,
+        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. ${formatRules}`,
       }],
     });
 
