@@ -1365,14 +1365,14 @@ app.post("/chat", async (req, res) => {
     const isTwitter = (req.body as any).format === "twitter";
     const formatRules = isTwitter
       ? `IMPORTANT: This reply will be posted on Twitter.\n1. Reply in the SAME language as the user.\n2. Use PLAIN TEXT only — NO markdown, NO tables, NO headers, NO bold/italic.\n3. Use emojis for visual structure (📊💰🐋✅❌⚠️).\n4. MUST include these numbers if available: price, market cap, holders count, liquidity USD.\n5. MUST include the FULL contract address (do NOT abbreviate with ... — show all 42 characters).\n6. NEVER fabricate numbers. If data is 0 or missing, say "data unavailable".\n7. Can be up to 500 characters, will be split into multiple tweets automatically.`
-      : `IMPORTANT rules:\n1. Reply in the SAME language as the user's message.\n2. Use markdown tables and formatting. Focus on actionable insights.\n3. MUST include the FULL contract address (all 42 characters, never abbreviate with ...).\n4. MUST include all available data: price, market cap, holders, liquidity, volume.\n5. NEVER fabricate or estimate numbers. If data is missing, say "数据不可用" but still show all available fields.\n6. Keep it under 300 words.`;
+      : `IMPORTANT rules:\n1. Reply in the SAME language as the user's message.\n2. Use markdown tables and formatting for professional presentation.\n3. MUST include the FULL contract address (all 42 characters, NEVER abbreviate with ...).\n4. MUST include ALL available data fields: price, market cap, 24h volume, holders count, liquidity USD, buy/sell tax, top holders, DEX pools.\n5. Show a complete analysis report with sections: 基本信息, 市场数据, 安全评估, 流动性分析, 持仓分布, 交易建议.\n6. NEVER fabricate numbers. If a specific field is missing, skip it rather than showing "不可用".\n7. Be thorough and detailed — show every piece of data from the agent results.`;
 
     const summaryMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: isTwitter ? 200 : 800,
+      max_tokens: isTwitter ? 200 : 2000,
       messages: [{
         role: "user",
-        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 2000)}\n\nGive a concise, helpful summary. ${formatRules}`,
+        content: `User asked: "${message}"${tokenInfo}\n\nAgent results:\n${JSON.stringify(results, null, 2).slice(0, 6000)}\n\nGive a thorough, detailed analysis. ${formatRules}`,
       }],
     });
 
