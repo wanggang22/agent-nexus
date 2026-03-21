@@ -51,7 +51,7 @@ function encodeInt256(n: bigint): string {
 
 // ── Transaction builders ──
 
-export type TxData = { to: string | null; data: string; value: string; chainId: string };
+export type TxData = { to: string | null; data: string; value: string; chainId: string; gas?: string };
 
 export function buildDeployTokenTx(p: {
   name: string; symbol: string; totalSupply: string; from: string;
@@ -62,6 +62,7 @@ export function buildDeployTokenTx(p: {
     data: "0x" + MEME_TOKEN_BYTECODE + encodeConstructorArgs(p.name, p.symbol, supply),
     value: "0x0",
     chainId: XLAYER_CHAIN_ID_HEX,
+    gas: "0x200000", // 2M gas for contract deploy
   };
 }
 
@@ -85,7 +86,7 @@ export function buildCreatePoolTx(p: {
     encodeUint256(fee) +
     encodeUint256(sqrtPriceX96);
 
-  return { to: UNISWAP_V3_NFPM, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX };
+  return { to: UNISWAP_V3_NFPM, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x100000" }; // 1M gas
 }
 
 export function buildApproveNFPMTx(p: {
@@ -94,7 +95,7 @@ export function buildApproveNFPMTx(p: {
   const data = "0x095ea7b3" +
     UNISWAP_V3_NFPM.replace("0x", "").toLowerCase().padStart(64, "0") +
     encodeUint256(p.amount);
-  return { to: p.tokenAddress, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX };
+  return { to: p.tokenAddress, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x20000" }; // 128K gas
 }
 
 export function buildAddLiquidityTx(p: {
@@ -129,6 +130,7 @@ export function buildAddLiquidityTx(p: {
     to: UNISWAP_V3_NFPM, data,
     value: "0x" + okbWei.toString(16),   // send native OKB (auto-wraps)
     chainId: XLAYER_CHAIN_ID_HEX,
+    gas: "0x200000", // 2M gas for add liquidity
   };
 }
 

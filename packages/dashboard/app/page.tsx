@@ -455,7 +455,7 @@ export default function Dashboard() {
       for (let i = 0; i < plan.transactions.length; i++) {
         setLaunchStep(i + 1);
         const { tx, step } = plan.transactions[i];
-        const txParams: any = { from: wallet, data: tx.data, value: tx.value, chainId: tx.chainId };
+        const txParams: any = { from: wallet, data: tx.data, value: tx.value, chainId: tx.chainId, gas: tx.gas };
         if (step !== "deploy") txParams.to = tx.to;
 
         const txHash = await provider.request({ method: "eth_sendTransaction", params: [txParams] });
