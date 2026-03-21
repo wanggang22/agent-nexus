@@ -1160,7 +1160,7 @@ app.post("/launch", async (req, res) => {
 });
 
 app.post("/chat", async (req, res) => {
-  const { message, chain, platform, user_id, wallet_address, history } = req.body;
+  const { message, chain, platform, user_id, wallet_address, history, no_auto_strategy } = req.body;
   const targetChain = chain || "xlayer";
 
   if (!message || typeof message !== "string") {
@@ -1272,8 +1272,11 @@ app.post("/chat", async (req, res) => {
             body = { ...(body || {}), from: (req.body as any).wallet_address || userWalletAddress || "0x0000000000000000000000000000000000000000" };
           }
 
-          // Strategy: inject wallet_address into body
+          // Strategy: inject wallet_address into body, skip if no_auto_strategy
           if (call.agent === "strategy") {
+            if (no_auto_strategy) {
+              return { service: call.description, status: 200, data: { skipped: true, description: body?.description || call.description } };
+            }
             body = { ...(body || {}), wallet_address: (req.body as any).wallet_address || userWalletAddress };
           }
 
