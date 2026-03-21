@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { env, x402PaymentMiddleware, recordCall, requestLogger, setupGracefulShutdown, resolveToken } from "shared";
+import { env, recordCall, requestLogger, setupGracefulShutdown, resolveToken } from "shared";
 
 /** Resolve symbol to address if needed */
 function resolveAddr(token: string, chain = "xlayer"): string {
@@ -23,19 +23,8 @@ app.use(cors());
 app.use(express.json());
 app.use(requestLogger(AGENT));
 
-app.use(
-  x402PaymentMiddleware({
-    payTo: account.address,
-    mockMode: true,
-    routes: {
-      "GET /analysis/technical/:token": { price: "$0.02", description: "Technical analysis report" },
-      "GET /analysis/fundamental/:token": { price: "$0.03", description: "Fundamental analysis" },
-      "GET /analysis/spread/:token": { price: "$0.01", description: "CEX-DEX spread analysis" },
-      "GET /analysis/meme/:token": { price: "$0.03", description: "Meme virality & community analysis" },
-      "GET /analysis/full/:token": { price: "$0.08", description: "Full analysis (technical + fundamental + meme + spread)" },
-    },
-  })
-);
+// x402 payment middleware removed — all analysis is now free
+// Rate limiting + credits handled by Gateway
 
 app.get("/health", (_req, res) => {
   res.json({ agent: AGENT, status: "online", wallet: account.address, timestamp: new Date().toISOString() });
