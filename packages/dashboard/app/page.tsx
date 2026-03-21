@@ -446,38 +446,44 @@ export default function Dashboard() {
       const plan = await resp.json();
       if (plan.error) throw new Error(plan.error);
 
-      setLaunchTotal(plan.transactions.length);
+      setLaunchTotal(1); // Single transaction now
       const provider = (window as any).okxwallet;
       if (!provider) throw new Error("OKX Wallet not found");
 
-      let deployedAddress = plan.predictedAddress;
+      let deployedAddress = "";
       let lpTokenId = "";
 
-      for (let i = 0; i < plan.transactions.length; i++) {
-        setLaunchStep(i + 1);
-        const { tx, step } = plan.transactions[i];
-        const txParams: any = { from: wallet, data: tx.data, value: tx.value, chainId: tx.chainId, gas: tx.gas };
-        if (step !== "deploy") txParams.to = tx.to;
+      // Single transaction via factory contract
+      setLaunchStep(1);
+      const { tx } = plan.transactions[0];
+      const txParams: any = { from: wallet, to: tx.to, data: tx.data, value: tx.value, chainId: tx.chainId, gas: tx.gas };
+      const txHash = await provider.request({ method: "eth_sendTransaction", params: [txParams] });
 
-        const txHash = await provider.request({ method: "eth_sendTransaction", params: [txParams] });
-
-        // Wait for confirmation
-        for (let j = 0; j < 30; j++) {
-          await new Promise(r => setTimeout(r, 2000));
-          const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
-          if (receipt) {
-            if (step === "deploy" && receipt.contractAddress) deployedAddress = receipt.contractAddress;
-            // Extract LP tokenId from addLiquidity logs (Transfer event from NFPM)
-            if (step === "addLiquidity" && receipt.logs) {
-              for (const log of receipt.logs) {
-                // ERC721 Transfer(address,address,uint256) = 0xddf252ad...
-                if (log.topics?.[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" && log.topics?.length === 4) {
-                  lpTokenId = BigInt(log.topics[3]).toString();
-                }
+      // Wait for confirmation and extract token address + LP tokenId from logs
+      for (let j = 0; j < 60; j++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [txHash] });
+        if (receipt) {
+          if (receipt.status === "0x0") throw new Error("Transaction reverted");
+          // Extract from TokenLaunched event: TokenLaunched(creator, token, pool, tokenId)
+          // selector = keccak256("TokenLaunched(address,address,address,uint256)")
+          const launchSig = "0xaa1fd485cb601a5b85e2cd1f22e0ca8107bde33fe09c9783a4d42871a0c6d0e1";
+          for (const log of (receipt.logs || [])) {
+            if (log.topics?.[0] === launchSig) {
+              deployedAddress = "0x" + log.topics[2].slice(26); // token address
+              const tokenIdHex = log.data?.slice(66, 130) || log.data?.slice(2, 66);
+              if (tokenIdHex) lpTokenId = BigInt("0x" + tokenIdHex).toString();
+            }
+          }
+          // Fallback: extract from ERC721 Transfer logs (NFPM mint)
+          if (!lpTokenId) {
+            for (const log of (receipt.logs || [])) {
+              if (log.topics?.[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" && log.topics?.length === 4) {
+                lpTokenId = BigInt(log.topics[3]).toString();
               }
             }
-            break;
           }
+          break;
         }
       }
 
