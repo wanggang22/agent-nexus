@@ -1081,28 +1081,30 @@ app.post("/strategies/:id/run", async (req, res) => {
   }
 
   try {
-    // Execute strategy: directly call signal agents for real data
-    const signalEndpoints = [
+    // Execute strategy: call ALL agents for comprehensive data
+    const endpoints = [
       `${SIGNAL_URL}/signals/smart-money?chain=xlayer`,
       `${SIGNAL_URL}/signals/meme-scan?chain=xlayer`,
       `${SIGNAL_URL}/signals/trending?chain=xlayer`,
+      `${SIGNAL_URL}/signals/whale-alert?chain=xlayer`,
+      `${SIGNAL_URL}/signals/hot-tokens?chain=xlayer`,
     ];
 
     const signalResults = await Promise.all(
-      signalEndpoints.map(async (url) => {
+      endpoints.map(async (url) => {
         try {
-          const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "AgentNexus" } });
+          const r = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { "User-Agent": "AgentNexus" } });
           return await r.json();
         } catch { return null; }
       })
     );
 
-    // Summarize with Claude based on strategy description
+    // Full analysis with Claude — no limits
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const summaryMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 800,
-      messages: [{ role: "user", content: `你是代币分析助手。用户的策略筛选条件是：${strategy.description}\n\n以下是链上实时数据：\n${JSON.stringify(signalResults.filter(Boolean), null, 2).slice(0, 3000)}\n\n请根据用户的筛选条件，从数据中找出符合条件的代币，给出简洁的结果列表。如果没有符合条件的，说明原因。` }],
+      max_tokens: 2000,
+      messages: [{ role: "user", content: `你是专业的加密货币分析师。用户的策略筛选条件是：${strategy.description}\n\n以下是 X Layer 链上实时数据（聪明钱信号、meme扫描、热门代币、鲸鱼异动、热度排行）：\n${JSON.stringify(signalResults.filter(Boolean), null, 2).slice(0, 8000)}\n\n请根据用户的筛选条件，给出详细的分析报告：\n1. 列出所有符合条件的代币（合约地址完整显示）\n2. 每个代币的关键数据（价格、市值、交易量、持仓人数、聪明钱动向）\n3. 风险评估和交易建议\n4. 如果没有完全符合的，列出最接近的并说明差距` }],
     });
 
     const summary = summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "No results";
@@ -1221,7 +1223,7 @@ app.post("/chat", async (req, res) => {
     // Step 1: Parse intent with Claude
     const intentMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 600,
+      max_tokens: 1000,
       messages: [
         ...(Array.isArray(history) && history.length > 0
           ? [{ role: "user" as const, content: `${INTENT_PROMPT}\n\nConversation history:\n${history.map((h: any) => `${h.role}: ${h.content}`).join("\n")}\n\nLatest user message: "${message}"\n\nReturn ONLY compact JSON, no whitespace.` }]
