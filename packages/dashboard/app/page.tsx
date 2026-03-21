@@ -530,7 +530,7 @@ export default function Dashboard() {
   // Load strategies from server on wallet connect + poll every 60s for cron results
   const syncStrategies = () => {
     if (!wallet) return;
-    fetch(`${GATEWAY}/strategies/${wallet}`).then(r => r.json()).then(data => {
+    fetch(`${GATEWAY}/strategies/${wallet}`, { headers: { "x-wallet-address": wallet || "" } }).then(r => r.json()).then(data => {
       if (data.strategies?.length) {
         setStrategies(data.strategies.map((s: any) => ({
           id: s.id, name: s.name, description: s.description,
@@ -599,7 +599,7 @@ export default function Dashboard() {
   const deleteStrategy = async (id: string) => {
     setStrategies(prev => prev.filter(s => s.id !== id));
     if (activeStrategyId === id) setActiveStrategyId(null);
-    try { await fetch(`${GATEWAY}/strategies/${id}`, { method: "DELETE" }); } catch {}
+    try { await fetch(`${GATEWAY}/strategies/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json", "x-wallet-address": wallet || "" } }); } catch {}
   };
 
   // ── Landing page (not logged in) ──
