@@ -57,6 +57,7 @@ async function askAgentNexus(message: string, authorId?: string): Promise<string
           `${c.dev_history.passed ? "✅" : "❌"} 开发者: ${c.dev_history.passed ? "无跑路记录" : "有跑路风险"}`,
           ``,
           `⚠️ 风险等级: ${riskLabel[risk.risk_level] || risk.risk_level}`,
+          `📅 ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`,
         ] : [
           `${token.toUpperCase()} (XLayer)`,
           ``,
@@ -70,6 +71,7 @@ async function askAgentNexus(message: string, authorId?: string): Promise<string
           `${c.dev_history.passed ? "✅" : "❌"} Dev: ${c.dev_history.passed ? "No rug history" : "Rug risk"}`,
           ``,
           `⚠️ Risk: ${riskLabel[risk.risk_level] || risk.risk_level}`,
+          `📅 ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`,
         ];
         return lines.join("\n");
       }
