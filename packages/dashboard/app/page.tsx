@@ -1031,8 +1031,8 @@ export default function Dashboard() {
                         <button onClick={() => {
                           const chatId = Date.now().toString();
                           const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
-                            ? `当前策略「${s.name}」的条件是：\n\n${s.description}\n\n你想怎么修改？告诉我你的需求，聊完后说「给我策略条件」，我会生成新的条件。`
-                            : `Current strategy "${s.name}" conditions:\n\n${s.description}\n\nWhat would you like to change? When done, say 'give me the strategy' and I'll generate updated conditions.`
+                            ? `当前策略「${s.name}」的条件是：\n\n${s.description}\n\n你想怎么修改？告诉我你的需求，聊完后说「给我策略条件」，我会生成**一句话的精简筛选条件**。`
+                            : `Current strategy "${s.name}" conditions:\n\n${s.description}\n\nWhat would you like to change? When done, say 'give me the strategy' and I'll generate a **single concise filter sentence**.`
                           };
                           const newThread: ChatThread = { id: chatId, title: `${lang === "zh" ? "策略" : "Strategy"}-${s.name}`, messages: [initMsg], createdAt: Date.now() };
                           setChatThreads(prev => [newThread, ...prev]);
@@ -1092,8 +1092,8 @@ export default function Dashboard() {
                       const name = strategyName || (lang === "zh" ? "新策略" : "New");
                       const chatId = Date.now().toString();
                       const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
-                        ? `你好！我来帮你制定「${name}」策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成可以直接使用的策略。`
-                        : `Hi! I'll help you build the "${name}" strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate it.`
+                        ? `你好！我来帮你制定「${name}」策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成**一句话的精简筛选条件**，你可以直接使用。\n\n例如：「找 X Layer 上市值低于 10 万美元、24h 交易量大于 1 万、持仓人数大于 50 的新代币」`
+                        : `Hi! I'll help you build the "${name}" strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate a **single concise filter sentence** you can use directly.\n\nExample: "Find new tokens on X Layer with mcap under $100k, 24h volume over $10k, and more than 50 holders"`
                       };
                       const newThread: ChatThread = { id: chatId, title: `${lang === "zh" ? "策略" : "Strategy"}-${name}`, messages: [initMsg], createdAt: Date.now() };
                       setChatThreads(prev => [newThread, ...prev]);
