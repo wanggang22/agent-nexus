@@ -823,21 +823,13 @@ export default function Dashboard() {
                             <div className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white prose-td:text-xs prose-th:text-xs prose-table:text-xs">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                             </div>
-                            {/* Show "Use this strategy" button if message contains strategy markers */}
-                            {(msg.text.includes("策略名称") || msg.text.includes("Strategy Name") || msg.text.includes("策略条件") || msg.text.includes("监控条件") || msg.text.includes("筛选条件") || msg.text.includes("触发条件")) && activeChat?.title?.startsWith(lang === "zh" ? "策略-" : "Strategy-") && (() => {
-                              // Extract strategy name from message
-                              const nameMatch = msg.text.match(/(?:策略名称|Strategy Name)[：:\s]*(.+)/);
-                              // Extract strategy description — grab all conditions as a block
-                              const descMatch = msg.text.match(/(?:策略条件|监控条件|筛选条件|触发条件|Strategy Condition|Filter)[：:\s]*(.+)/);
-                              // Fallback: grab everything after the conditions header until next section
-                              const blockMatch = !descMatch ? msg.text.match(/(?:策略条件|监控条件|筛选条件|触发条件|Strategy Condition|Filter)[：:\s]*\n([\s\S]*?)(?:\n\n|\n#{1,3}\s|$)/) : null;
-                              const stratName = nameMatch ? nameMatch[1].trim() : "";
-                              const stratDesc = descMatch ? descMatch[1].trim() : blockMatch ? blockMatch[1].trim().replace(/^[•\-\*]\s*/gm, "").split("\n").join("，") : "";
-                              if (!stratName && !stratDesc) return null;
+                            {/* Show "Use this strategy" button in strategy chats */}
+                            {activeChat?.title?.startsWith(lang === "zh" ? "策略" : "Strategy") && msg.text.length > 30 && (() => {
+                              const stratName = activeChat?.title?.replace(/^策略-|^Strategy-/, "") || "";
                               return (
                                 <button onClick={() => {
-                                  if (stratName) setStrategyName(stratName);
-                                  if (stratDesc) setStrategyInput(stratDesc);
+                                  setStrategyName(stratName);
+                                  setStrategyInput(msg.text);
                                   setActiveStrategyId(null);
                                   setActiveView("strategy");
                                 }} className="mt-3 px-4 py-2 rounded-lg text-xs font-medium bg-nexus-green/20 text-nexus-green hover:bg-nexus-green/30 transition-colors">
