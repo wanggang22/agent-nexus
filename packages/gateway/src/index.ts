@@ -1085,7 +1085,7 @@ app.post("/strategies/:id/run", async (req, res) => {
     const chatResp = await fetch(`http://localhost:${PORT}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: strategy.description, wallet_address: strategy.walletAddress }),
+      body: JSON.stringify({ message: `执行以下策略，查询链上数据并返回结果：${strategy.description}`, wallet_address: strategy.walletAddress }),
       signal: AbortSignal.timeout(30000),
     });
     const chatData = await chatResp.json() as any;
