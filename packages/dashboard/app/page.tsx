@@ -809,9 +809,28 @@ export default function Dashboard() {
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={msg.role === "user" ? "chat-user" : "chat-agent"}>
                         {msg.role === "ai" ? (
-                          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white prose-td:text-xs prose-th:text-xs prose-table:text-xs">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                          </div>
+                          <>
+                            <div className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-strong:text-white prose-td:text-xs prose-th:text-xs prose-table:text-xs">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                            </div>
+                            {/* Show "Use this strategy" button if message contains strategy markers */}
+                            {(msg.text.includes("策略名称") || msg.text.includes("Strategy Name") || msg.text.includes("策略条件") || msg.text.includes("监控条件")) && activeChat?.title?.startsWith(lang === "zh" ? "策略-" : "Strategy-") && (() => {
+                              // Extract strategy name and description from the message
+                              const nameMatch = msg.text.match(/(?:策略名称|Strategy Name)[：:\s]*(.+)/);
+                              const descMatch = msg.text.match(/(?:策略条件|监控条件|Strategy Condition|Filter)[：:\s]*(.+)/);
+                              if (!nameMatch && !descMatch) return null;
+                              return (
+                                <button onClick={() => {
+                                  if (nameMatch) setStrategyName(nameMatch[1].trim());
+                                  if (descMatch) setStrategyInput(descMatch[1].trim());
+                                  setActiveStrategyId(null);
+                                  setActiveView("strategy");
+                                }} className="mt-3 px-4 py-2 rounded-lg text-xs font-medium bg-nexus-green/20 text-nexus-green hover:bg-nexus-green/30 transition-colors">
+                                  {lang === "zh" ? "📋 使用此策略" : "📋 Use this strategy"}
+                                </button>
+                              );
+                            })()}
+                          </>
                         ) : (
                           <div className="whitespace-pre-wrap">{msg.text}</div>
                         )}
@@ -1047,8 +1066,31 @@ export default function Dashboard() {
                       className="btn-primary w-full text-sm disabled:opacity-40">{t.saveStrategy}</button>
                   </div>
 
+                  {/* AI Strategy Builder */}
+                  <div className="mt-6 mb-4">
+                    <button onClick={() => {
+                      const chatId = Date.now().toString();
+                      const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
+                        ? "你好！我来帮你制定交易策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成可以直接使用的策略。"
+                        : "Hi! I'll help you build a trading strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate it."
+                      };
+                      const newThread: ChatThread = { id: chatId, title: lang === "zh" ? "策略-新策略" : "Strategy-New", messages: [initMsg], createdAt: Date.now() };
+                      setChatThreads(prev => [newThread, ...prev]);
+                      setActiveChatId(chatId);
+                      setActiveView("chat");
+                    }} className="w-full card !p-4 text-left hover:border-nexus-green/30 transition-colors border-dashed">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🤖</span>
+                        <div>
+                          <div className="text-sm text-white font-medium">{lang === "zh" ? "用 AgentNexus 制定策略" : "Build Strategy with AgentNexus"}</div>
+                          <div className="text-[10px] text-nexus-muted">{lang === "zh" ? "通过对话让 AI 帮你生成策略条件" : "Chat with AI to generate strategy conditions"}</div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
                   {/* Strategy Templates */}
-                  <div className="mt-6">
+                  <div className="mt-2">
                     <div className="text-[10px] text-nexus-muted uppercase tracking-widest mb-3">
                       {lang === "zh" ? "快速模板" : "Quick Templates"}
                     </div>
