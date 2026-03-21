@@ -1092,8 +1092,8 @@ export default function Dashboard() {
                       const name = strategyName || (lang === "zh" ? "新策略" : "New");
                       const chatId = Date.now().toString();
                       const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
-                        ? `你好！我来帮你制定「${name}」策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成**一句话的精简筛选条件**，你可以直接使用。\n\n例如：「找 X Layer 上市值低于 10 万美元、24h 交易量大于 1 万、持仓人数大于 50 的新代币」`
-                        : `Hi! I'll help you build the "${name}" strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate a **single concise filter sentence** you can use directly.\n\nExample: "Find new tokens on X Layer with mcap under $100k, 24h volume over $10k, and more than 50 holders"`
+                        ? `你好！我来帮你制定「${name}」策略。\n\n你可以从这些维度描述你的需求：\n📊 链上数据：市值、交易量、持仓人数、流动性深度\n🐋 聪明钱：鲸鱼买入、聪明钱包跟踪、大额转账\n🔥 社交热度：Twitter/X 讨论量、社区活跃度、KOL 提及\n🎭 文化符号：meme 叙事、热点事件关联、病毒传播潜力\n📈 技术指标：价格趋势、买卖比、成交量异动\n\n聊完后说「给我策略条件」，我会生成**一句精简的筛选条件**。\n\n例如：「找 X Layer 上市值低于 10 万、聪明钱近期买入、Twitter 讨论度上升的 meme 代币」`
+                        : `Hi! I'll help you build the "${name}" strategy.\n\nDescribe what you want using these dimensions:\n📊 On-chain: mcap, volume, holders, liquidity depth\n🐋 Smart money: whale buys, smart wallet tracking, large transfers\n🔥 Social hype: Twitter/X mentions, community activity, KOL callouts\n🎭 Cultural: meme narratives, trending events, viral potential\n📈 Technical: price trend, buy/sell ratio, volume spikes\n\nWhen ready, say 'give me the strategy' and I'll generate a **single concise filter sentence**.\n\nExample: "Find meme tokens on X Layer with mcap under $100k, recent smart money buys, and rising Twitter mentions"`
                       };
                       const newThread: ChatThread = { id: chatId, title: `${lang === "zh" ? "策略" : "Strategy"}-${name}`, messages: [initMsg], createdAt: Date.now() };
                       setChatThreads(prev => [newThread, ...prev]);
@@ -1117,10 +1117,10 @@ export default function Dashboard() {
                     </div>
                     <div className="grid grid-cols-1 gap-2">
                       {[
-                        { name: lang === "zh" ? "低市值新币" : "Low Mcap Gems", desc: lang === "zh" ? "找X Layer上市值低于10万美元、持有人数大于50的代币" : "Find tokens on X Layer with mcap under $100k and more than 50 holders" },
-                        { name: lang === "zh" ? "聪明钱跟踪" : "Smart Money Tracker", desc: lang === "zh" ? "监控聪明钱最近买入的代币，筛选买入金额大于500美元的" : "Track smart money buys over $500 on X Layer" },
-                        { name: lang === "zh" ? "鲸鱼异动" : "Whale Alerts", desc: lang === "zh" ? "监控X Layer上大额转账和鲸鱼钱包异动" : "Monitor large transfers and whale wallet movements on X Layer" },
-                        { name: lang === "zh" ? "Meme 热度监控" : "Meme Hype Monitor", desc: lang === "zh" ? "找X Layer上24小时交易量增长最快的meme代币" : "Find meme tokens with fastest 24h volume growth on X Layer" },
+                        { name: lang === "zh" ? "聪明钱 + 低市值" : "Smart Money + Low Mcap", desc: lang === "zh" ? "找X Layer上聪明钱近期买入、市值低于10万美元、持有人数大于50的代币" : "Find tokens on X Layer with recent smart money buys, mcap under $100k, and more than 50 holders" },
+                        { name: lang === "zh" ? "社交热度飙升" : "Social Hype Surge", desc: lang === "zh" ? "找X Layer上Twitter讨论量24h增长超200%、社区活跃度高的meme代币" : "Find meme tokens on X Layer with Twitter mentions up 200%+ in 24h and high community activity" },
+                        { name: lang === "zh" ? "鲸鱼 + Meme 叙事" : "Whale + Meme Narrative", desc: lang === "zh" ? "监控X Layer上鲸鱼大额买入且有meme文化叙事的代币，买入金额大于1000美元" : "Track whale buys over $1000 on X Layer meme tokens with strong cultural narrative" },
+                        { name: lang === "zh" ? "新币早期发现" : "Early New Token", desc: lang === "zh" ? "找X Layer上上线不到24小时、交易量增长快、没有蜜罐风险的新代币" : "Find tokens on X Layer listed under 24h, fast volume growth, no honeypot risk" },
                       ].map((tpl, i) => (
                         <button key={i} onClick={() => { setStrategyName(tpl.name); setStrategyInput(tpl.desc); }}
                           className="card !p-3 text-left hover:border-nexus-accent/30 transition-colors">
