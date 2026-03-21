@@ -25,12 +25,49 @@ let lastMentionId: string | undefined;
 const repliedTweets = new Set<string>();
 
 async function askAgentNexus(message: string, authorId?: string): Promise<string> {
+  // Try to extract token name from message for direct risk analysis (faster, no AI timeout)
+  const tokenMatch = message.match(/([A-Za-z]{2,10})/);
+  const token = tokenMatch?.[1] || "";
+
+  // First try: direct risk/token-safety (fast, complete data, no Claude needed)
+  if (token) {
+    try {
+      const riskResp = await fetch(`${GATEWAY_URL}/risk/token-safety/${token}`, {
+        headers: { "User-Agent": "AgentNexus-TwitterBot" },
+        signal: AbortSignal.timeout(15000),
+      });
+      const risk = await riskResp.json() as any;
+      if (risk.checks && risk.price > 0) {
+        const c = risk.checks;
+        const price = risk.price < 0.01 ? `$${risk.price.toFixed(6)}` : `$${risk.price.toFixed(2)}`;
+        const mcap = risk.market_cap > 1e6 ? `$${(risk.market_cap / 1e6).toFixed(2)}M` : `$${Math.round(risk.market_cap)}`;
+        const liq = c.liquidity.usd_value > 1e3 ? `$${(c.liquidity.usd_value / 1e3).toFixed(0)}K` : `$${Math.round(c.liquidity.usd_value)}`;
+        const lines = [
+          `${token.toUpperCase()} (XLayer)`,
+          ``,
+          `${price} | MCap ${mcap} | Holders ${c.holders.count} | Liq ${liq}`,
+          ``,
+          `${c.honeypot.passed ? "✅" : "❌"} Honeypot: ${c.honeypot.passed ? "Safe" : "DANGER"}`,
+          `${c.tax.passed ? "✅" : "⚠️"} Tax: Buy ${c.tax.buy_tax}% / Sell ${c.tax.sell_tax}%`,
+          `${c.holders.passed ? "✅" : "⚠️"} Holders: ${c.holders.concentration}`,
+          `${c.dev_history.passed ? "✅" : "❌"} Dev: ${c.dev_history.detail}`,
+          ``,
+          `Risk: ${risk.risk_level.toUpperCase()}`,
+          ``,
+          `— AgentNexus AI | ${SITE_URL}`,
+        ];
+        return lines.join("\n");
+      }
+    } catch {}
+  }
+
+  // Fallback: use /chat with longer timeout
   try {
     const resp = await fetch(`${GATEWAY_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": "AgentNexus-TwitterBot" },
       body: JSON.stringify({ message, platform: "twitter", user_id: authorId, format: "twitter" }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
     const data = await resp.json() as any;
     if (data.error) return `Error: ${data.error}`;
