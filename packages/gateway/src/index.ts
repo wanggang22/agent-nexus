@@ -1252,6 +1252,22 @@ app.post("/chat", async (req, res) => {
       return res.json({ reply: intent.reply || "I'm not sure what you'd like to do. Try asking about a token or signal.", results: [] });
     }
 
+    // Auto-enrich: if querying a token, ensure we call multiple agents for comprehensive data
+    const hasToken = calls.some(c => c.tokens && c.tokens.length > 0);
+    const agentsUsed = new Set(calls.map(c => c.agent));
+    if (hasToken && !agentsUsed.has("trader") && !agentsUsed.has("launch")) {
+      const tokenSymbol = calls.find(c => c.tokens?.length)?.tokens?.[0] || "";
+      if (!agentsUsed.has("signal")) {
+        calls.push({ agent: "signal", method: "GET", path: `/signals/smart-money?chain=${targetChain}`, tokens: [], description: "Smart money signals" });
+      }
+      if (!agentsUsed.has("risk") && tokenSymbol) {
+        calls.push({ agent: "risk", method: "GET", path: `/risk/check/${tokenSymbol}`, tokens: [tokenSymbol], description: "Risk assessment" });
+      }
+      if (!agentsUsed.has("analyst") && tokenSymbol) {
+        calls.push({ agent: "analyst", method: "GET", path: `/basic/full/${tokenSymbol}`, tokens: [tokenSymbol], description: "Basic analysis" });
+      }
+    }
+
     // x402 quota check: trading, launch, strategy actions cost credits; pure data queries are free
     const paidAgents = ["trader", "launch", "strategy"];
     const hasPaidAction = calls.some(c => paidAgents.includes(c.agent));
