@@ -36,6 +36,11 @@ interface INonfungiblePositionManager {
     );
 }
 
+interface IWOKB {
+    function deposit() external payable;
+    function approve(address spender, uint256 amount) external returns (bool);
+}
+
 contract MemeToken {
     string public name;
     string public symbol;
@@ -86,10 +91,9 @@ contract MemeLaunchFactory {
     address public immutable nfpm;
     address public immutable wokb;
     uint24 public constant FEE = 10000; // 1%
+    uint256 public constant SEED_OKB = 0.001 ether; // 0.001 OKB (~$0.09)
 
-    // LP NFT ownership: tokenId → creator (for fee collection only)
     mapping(uint256 => address) public lpCreator;
-    // Token → creator
     mapping(address => address) public tokenCreator;
 
     event TokenLaunched(
@@ -111,12 +115,14 @@ contract MemeLaunchFactory {
         int24 tickLower,
         int24 tickUpper,
         uint160 sqrtPriceX96
-    ) external returns (address token, uint256 tokenId) {
-        // 1. Deploy token — mints all supply to this factory
+    ) external payable returns (address token, uint256 tokenId) {
+        require(msg.value >= SEED_OKB, "Send 0.001 OKB");
+
+        // 1. Deploy token
         MemeToken t = new MemeToken(name, symbol, totalSupply);
         token = address(t);
 
-        // 2. Sort tokens for Uniswap
+        // 2. Sort tokens
         (address token0, address token1) = token < wokb
             ? (token, wokb)
             : (wokb, token);
@@ -126,13 +132,17 @@ contract MemeLaunchFactory {
             token0, token1, FEE, sqrtPriceX96
         );
 
-        // 4. Approve NFPM to spend tokens
-        MemeToken(token).approve(nfpm, totalSupply);
+        // 4. Wrap OKB → WOKB
+        IWOKB(wokb).deposit{value: SEED_OKB}();
 
-        // 5. Add single-sided liquidity — LP NFT stays in this contract (LOCKED)
+        // 5. Approve NFPM
+        MemeToken(token).approve(nfpm, totalSupply);
+        IWOKB(wokb).approve(nfpm, SEED_OKB);
+
+        // 6. Add dual-sided liquidity — LP locked in factory
         bool tokenIsToken0 = token < wokb;
-        uint256 amount0 = tokenIsToken0 ? totalSupply : 0;
-        uint256 amount1 = tokenIsToken0 ? 0 : totalSupply;
+        uint256 amount0 = tokenIsToken0 ? totalSupply : SEED_OKB;
+        uint256 amount1 = tokenIsToken0 ? SEED_OKB : totalSupply;
 
         (tokenId,,,) = INonfungiblePositionManager(nfpm).mint(
             INonfungiblePositionManager.MintParams({
@@ -143,37 +153,34 @@ contract MemeLaunchFactory {
                 tickUpper: tickUpper,
                 amount0Desired: amount0,
                 amount1Desired: amount1,
-                amount0Min: amount0 * 95 / 100,
-                amount1Min: amount1 * 95 / 100,
-                recipient: address(this), // LP locked in factory forever
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
                 deadline: block.timestamp + 3600
             })
         );
 
-        // Record creator for fee collection
         lpCreator[tokenId] = msg.sender;
         tokenCreator[token] = msg.sender;
+
+        // Refund excess OKB
+        if (msg.value > SEED_OKB) {
+            payable(msg.sender).transfer(msg.value - SEED_OKB);
+        }
 
         emit TokenLaunched(msg.sender, token, pool, tokenId);
     }
 
-    /**
-     * Collect trading fees — only the original creator can call.
-     * Fees are forwarded to the creator. LP stays locked.
-     */
     function collectFees(uint256 tokenId) external {
         require(lpCreator[tokenId] == msg.sender, "Not creator");
 
-        // Collect max fees
         INonfungiblePositionManager(nfpm).collect(
             INonfungiblePositionManager.CollectParams({
                 tokenId: tokenId,
-                recipient: msg.sender, // fees go to creator
+                recipient: msg.sender,
                 amount0Max: type(uint128).max,
                 amount1Max: type(uint128).max
             })
         );
     }
-
-    // No decreaseLiquidity, no transfer — LP is permanently locked
 }

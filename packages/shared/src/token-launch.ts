@@ -12,7 +12,7 @@
 export const XLAYER_WOKB = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
 export const UNISWAP_V3_FACTORY = "0xb76c7abd3eb4b07ec14c5d7f9b265e8d37432e11";
 export const UNISWAP_V3_NFPM = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
-export const LAUNCH_FACTORY = "0x05bb9cafaa9f7f6e1fe83cc8f608194755be12aa";
+export const LAUNCH_FACTORY = "0xce4548490d48e7e11debc342b14dbb18a57c63e3";
 export const XLAYER_RPC = "https://rpc.xlayer.tech";
 export const XLAYER_CHAIN_ID_HEX = "0xc4";
 
@@ -99,9 +99,9 @@ function buildFactoryLaunchTx(p: {
   return {
     to: LAUNCH_FACTORY,
     data,
-    value: "0x0",
+    value: "0x" + (10n ** 15n).toString(16), // 0.001 OKB seed liquidity
     chainId: XLAYER_CHAIN_ID_HEX,
-    gas: "0x400000", // 4M gas (deploys token + creates pool + adds liquidity)
+    gas: "0x500000", // 5M gas (deploys token + wraps OKB + creates pool + adds liquidity)
   };
 }
 
@@ -182,16 +182,16 @@ export async function generateLaunchPlan(params: {
   let poolSqrtPriceX96: bigint;
 
   if (tokenIsToken0) {
-    // Price 1 tick below tickLower → 100% token0 single-sided
-    // Gap is minimal (1 tick), first buy pushes price into range
+    // Dual-sided: price inside range, 0.001 OKB seed liquidity
     tickLower = priceTick;
     tickUpper = MAX_TICK;
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - 1);
+    // Price 1 tick inside range so both tokens are active
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + 1);
   } else {
     tickLower = MIN_TICK;
     tickUpper = priceTick;
-    // Price 1 tick above tickUpper → 100% token1 single-sided
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + 1);
+    // Price 1 tick inside range
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - 1);
   }
 
   const tradeUrl = `https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${predictedToken}`;
