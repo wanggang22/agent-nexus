@@ -996,7 +996,7 @@ export default function Dashboard() {
                         </button>
                         <button onClick={async () => {
                           try {
-                            const resp = await fetch(`${GATEWAY}/strategies/${s.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" } });
+                            const resp = await fetch(`${GATEWAY}/strategies/${s.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet_address: wallet }) });
                             if (resp.status === 402) { handle402(await resp.json(), () => {}); return; }
                             const data = await resp.json();
                             if (data.success) setStrategies(prev => prev.map(x => x.id === s.id ? { ...x, results: [data.result.summary, ...x.results] } : x));
