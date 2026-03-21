@@ -118,8 +118,14 @@ export default function Dashboard() {
     if (typeof window !== "undefined") localStorage.setItem("nexus_chats", JSON.stringify(chatThreads));
   }, [chatThreads]);
 
-  // Auto-scroll
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeChat?.messages.length]);
+  // Auto-scroll only when near bottom (don't override manual scroll-up)
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); return; }
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    if (isNearBottom) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeChat?.messages.length]);
 
   // ── Launch state ──
   const [launches, setLaunches] = useState<LaunchRecord[]>(() => {
@@ -781,7 +787,7 @@ export default function Dashboard() {
         {activeView === "chat" && (
           <div className="flex-1 flex flex-col">
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" ref={chatScrollRef}>
               {!activeChat || activeChat.messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-nexus-accent to-nexus-green flex items-center justify-center mb-4 shadow-lg shadow-nexus-accent/20">
