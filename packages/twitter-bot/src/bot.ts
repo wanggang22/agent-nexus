@@ -28,7 +28,7 @@ async function askAgentNexus(message: string, authorId?: string): Promise<string
   try {
     const resp = await fetch(`${GATEWAY_URL}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "User-Agent": "AgentNexus-TwitterBot" },
       body: JSON.stringify({ message, platform: "twitter", user_id: authorId }),
       signal: AbortSignal.timeout(30000),
     });

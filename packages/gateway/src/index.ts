@@ -53,6 +53,12 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.ip || req.headers["x-forwarded-for"] as string || "unknown",
   skip: (req) => {
+    // Internal requests (Railway services, Twitter Bot) skip rate limit
+    const ip = req.ip || "";
+    if (ip === "127.0.0.1" || ip === "::1" || ip.includes("railway.internal")) return true;
+    const ua = req.headers["user-agent"] as string || "";
+    if (ua.includes("AgentNexus")) return true; // internal service calls
+
     // Paid users (have credits) skip rate limit, deduct 1 credit per request
     const wallet = req.body?.wallet_address || req.headers["x-wallet-address"] as string;
     if (!wallet) return false;
