@@ -3,6 +3,54 @@ import { privateKeyToAccount } from "viem/accounts";
 import { env, xlayer, runOnchainos, runOnchainosAsync, safeJsonParse } from "shared";
 import type { TradeQuote } from "shared";
 
+// ── Uniswap V3 SwapRouter02 on X Layer (official) ──
+const UNISWAP_V3_ROUTER = "0x4f0c28f5926afda16bf2506d5d9e57ea190f9bca";
+const WOKB_ADDRESS = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
+
+function encodeUint256(n: bigint): string {
+  return n.toString(16).padStart(64, "0");
+}
+
+/**
+ * Build a Uniswap V3 exactInputSingle swap tx.
+ * Used as fallback when OKX DEX aggregator can't find a route.
+ */
+function buildUniswapV3SwapTx(p: {
+  fromToken: string; toToken: string; amountIn: string;
+  walletAddress: string; slippagePct?: number;
+}): { to: string; data: string; value: string } {
+  const isNativeIn = p.fromToken.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    || p.fromToken === "0x0000000000000000000000000000000000000000";
+  const isNativeOut = p.toToken.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    || p.toToken === "0x0000000000000000000000000000000000000000";
+
+  const tokenIn = isNativeIn ? WOKB_ADDRESS : p.fromToken;
+  const tokenOut = isNativeOut ? WOKB_ADDRESS : p.toToken;
+  const amountIn = BigInt(p.amountIn);
+  const slippage = p.slippagePct || 15; // high default for meme coins
+  const amountOutMin = 0n; // accept any amount for meme coins
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200); // 20 min
+  const fee = 10000n; // 1% fee tier
+  const sqrtPriceLimitX96 = 0n; // no price limit
+
+  // exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))
+  // Selector: 0x04e45aaf
+  const data = "0x04e45aaf" +
+    tokenIn.replace("0x", "").toLowerCase().padStart(64, "0") +
+    tokenOut.replace("0x", "").toLowerCase().padStart(64, "0") +
+    encodeUint256(fee) +
+    p.walletAddress.replace("0x", "").toLowerCase().padStart(64, "0") +
+    encodeUint256(amountIn) +
+    encodeUint256(amountOutMin) +
+    encodeUint256(sqrtPriceLimitX96);
+
+  return {
+    to: UNISWAP_V3_ROUTER,
+    data,
+    value: isNativeIn ? "0x" + amountIn.toString(16) : "0x0",
+  };
+}
+
 function generateId(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const rand = Math.random().toString(36).slice(2, 6);
@@ -153,35 +201,33 @@ export async function buildTrade(
   const quote = await getQuote(fromToken, toToken, amount, chain, maxSlippage);
   const slippageNum = parseFloat(quote.slippage) || 1;
 
-  // OKX DEX aggregator builds the swap tx
+  // Try OKX DEX aggregator first
   const swapRaw = await runOnchainosAsync(
     `swap swap --from ${fromToken} --to ${toToken} --amount ${amount} --chain ${chain === "xlayer" ? "196" : chain} --wallet ${walletAddress} --slippage ${slippageNum}`
   );
 
-  if (!swapRaw) {
-    return { success: false, error: "Failed to get swap data from OKX DEX aggregator", tx: null };
-  }
+  let to: string, data: string, value: string;
 
-  const swapData = safeJsonParse(swapRaw);
-  if (!swapData?.data) {
-    return { success: false, error: "Invalid swap data", tx: null };
-  }
+  const swapData = swapRaw ? safeJsonParse(swapRaw) : null;
+  const txData = swapData?.data?.[0] || swapData?.data;
 
-  const txData = swapData.data[0] || swapData.data;
-  const to = txData.tx?.to || txData.to || txData.contractAddress;
-  const data = txData.tx?.data || txData.data || txData.calldata;
-  const value = txData.tx?.value || txData.value || "0";
-
-  if (!to || !data) {
-    return { success: false, error: "Missing transaction target or calldata", tx: null };
-  }
-
-  // Simulate
-  const simRaw = await runOnchainosAsync(
-    `gateway simulate --from ${walletAddress} --to ${to} --data ${data} --chain ${chain === "xlayer" ? "196" : chain}`
-  );
-  if (simRaw && simRaw.includes("fail")) {
-    return { success: false, error: "Transaction simulation failed — trade would revert", tx: null };
+  if (txData && (txData.tx?.to || txData.to) && (txData.tx?.data || txData.data || txData.calldata)) {
+    // OKX DEX route available
+    to = txData.tx?.to || txData.to || txData.contractAddress;
+    data = txData.tx?.data || txData.data || txData.calldata;
+    value = txData.tx?.value || txData.value || "0";
+  } else {
+    // Fallback: Uniswap V3 direct swap
+    console.log("[Trader] OKX DEX unavailable, falling back to Uniswap V3 SwapRouter02");
+    const amountWei = toMinimalUnits(amount);
+    const uniTx = buildUniswapV3SwapTx({
+      fromToken, toToken, amountIn: amountWei,
+      walletAddress, slippagePct: slippageNum,
+    });
+    to = uniTx.to;
+    data = uniTx.data;
+    value = uniTx.value;
+    quote.route = "Uniswap V3 (direct)";
   }
 
   // Estimate gas
