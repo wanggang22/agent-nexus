@@ -65,7 +65,7 @@ function splitForTweets(text: string, maxLen = 270): string[] {
   return chunks;
 }
 
-/** Strip markdown for Twitter — tables, headers, bold etc don't render */
+/** Strip markdown + crypto addresses for Twitter */
 function stripMarkdown(text: string): string {
   return text
     .replace(/#{1,6}\s*/g, "")           // headers
@@ -76,6 +76,8 @@ function stripMarkdown(text: string): string {
     .replace(/```[^`]*```/g, "")         // code blocks
     .replace(/`([^`]*)`/g, "$1")         // inline code
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links
+    .replace(/0x[a-fA-F0-9]{40}/g, "")  // remove full crypto addresses (Twitter 7-day restriction)
+    .replace(/CA:\s*/g, "")              // remove CA: label
     .replace(/\n{3,}/g, "\n\n")          // excessive newlines
     .trim();
 }
