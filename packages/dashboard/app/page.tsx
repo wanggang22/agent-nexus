@@ -17,7 +17,7 @@ const LANG: Record<string, Record<string, string>> = {
     placeholder: "Ask anything about tokens, trading, analysis...",
     launchToken: "Launch Token", tokenName: "Token Name", tokenSymbol: "Token Symbol",
     totalSupply: "Total Supply",
-    launchDesc: "Deploy your meme coin on X Layer — free, earn 1% trading fees",
+    launchDesc: "Deploy your meme coin on X Layer — 0.001 OKB, earn 1% trading fees",
     launching: "Launching...", step: "Step", of: "of",
     launchSuccess: "Token launched!", viewExplorer: "View on Explorer", launchAnother: "Launch Another",
     needOKXWallet: "Connect OKX Wallet to launch tokens",
@@ -45,7 +45,7 @@ const LANG: Record<string, Record<string, string>> = {
     placeholder: "问任何关于代币、交易、分析的问题...",
     launchToken: "发射代币", tokenName: "代币名称", tokenSymbol: "代币符号",
     totalSupply: "总供应量",
-    launchDesc: "在 X Layer 上免费发射 Meme 币 — 赚取 1% 交易手续费",
+    launchDesc: "在 X Layer 上发射 Meme 币 — 0.001 OKB，赚取 1% 交易手续费",
     launching: "发射中...", step: "第", of: "步，共",
     launchSuccess: "代币发射成功！", viewExplorer: "在浏览器中查看", launchAnother: "继续发射",
     needOKXWallet: "请连接 OKX 钱包以发射代币",
@@ -499,7 +499,7 @@ export default function Dashboard() {
   };
 
   // ── Collect LP fees via factory ──
-  const FACTORY_ADDRESS = "0x4e9a57021c86c9c16c109a96ff3cb8cd778f0316";
+  const FACTORY_ADDRESS = "0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a";
   const handleCollectFees = async (tokenId: string) => {
     if (!wallet || walletMode !== "okx") return;
     const provider = (window as any).okxwallet;
@@ -917,7 +917,7 @@ export default function Dashboard() {
                       <div className="flex justify-between"><span>Network</span><span className="text-white">X Layer</span></div>
                       <div className="flex justify-between"><span>DEX</span><span className="text-white">Uniswap V3 (1% fee)</span></div>
                       <div className="flex justify-between"><span>Pair</span><span className="text-white">{launchSymbol || "TOKEN"}/WOKB</span></div>
-                      <div className="flex justify-between"><span>{lang === "zh" ? "费用" : "Cost"}</span><span className="text-nexus-green">{lang === "zh" ? "免费" : "Free"}</span></div>
+                      <div className="flex justify-between"><span>{lang === "zh" ? "费用" : "Cost"}</span><span className="text-nexus-green">0.001 OKB (~$0.09)</span></div>
                       <div className="flex justify-between"><span>{lang === "zh" ? "初始市值" : "Initial MCap"}</span><span className="text-white">~50 OKB (~$4,400)</span></div>
                       <div className="flex justify-between"><span>{lang === "zh" ? "收入" : "Revenue"}</span><span className="text-white">{lang === "zh" ? "1% 交易手续费" : "1% trading fees"}</span></div>
                     </div>
