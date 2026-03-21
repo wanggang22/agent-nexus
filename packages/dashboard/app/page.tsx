@@ -1036,6 +1036,19 @@ export default function Dashboard() {
                             if (data.success) setStrategies(prev => prev.map(x => x.id === s.id ? { ...x, results: [data.result.summary, ...x.results] } : x));
                           } catch {}
                         }} className="px-3 py-1 rounded-lg text-xs font-medium bg-nexus-accent/15 text-nexus-accent-light hover:bg-nexus-accent/25">{t.runNow}</button>
+                        <button onClick={() => {
+                          const chatId = Date.now().toString();
+                          const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
+                            ? `当前策略「${s.name}」的条件是：\n\n${s.description}\n\n你想怎么修改？告诉我你的需求，聊完后说「给我策略条件」，我会生成新的条件。`
+                            : `Current strategy "${s.name}" conditions:\n\n${s.description}\n\nWhat would you like to change? When done, say 'give me the strategy' and I'll generate updated conditions.`
+                          };
+                          const newThread: ChatThread = { id: chatId, title: `${lang === "zh" ? "策略" : "Strategy"}-${s.name}`, messages: [initMsg], createdAt: Date.now() };
+                          setChatThreads(prev => [newThread, ...prev]);
+                          setActiveChatId(chatId);
+                          setActiveView("chat");
+                        }} className="px-3 py-1 rounded-lg text-xs font-medium bg-nexus-accent/15 text-nexus-accent-light hover:bg-nexus-accent/25">
+                          {lang === "zh" ? "修改" : "Edit"}
+                        </button>
                         <button onClick={() => deleteStrategy(s.id)} className="text-xs text-nexus-muted hover:text-red-400">{t.deleteStrategy}</button>
                       </div>
                       <div className="card mb-4">
@@ -1084,12 +1097,13 @@ export default function Dashboard() {
                   {/* AI Strategy Builder */}
                   <div className="mt-6 mb-4">
                     <button onClick={() => {
+                      const name = strategyName || (lang === "zh" ? "新策略" : "New");
                       const chatId = Date.now().toString();
                       const initMsg: ChatMessage = { role: "ai", text: lang === "zh"
-                        ? "你好！我来帮你制定交易策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成可以直接使用的策略。"
-                        : "Hi! I'll help you build a trading strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate it."
+                        ? `你好！我来帮你制定「${name}」策略。\n\n请告诉我：\n1. 你想监控什么类型的代币？（meme币、蓝筹、新币等）\n2. 你关注哪些指标？（市值、交易量、持仓人数等）\n3. 有什么具体的筛选条件？\n\n聊完后说「给我策略条件」，我会生成可以直接使用的策略。`
+                        : `Hi! I'll help you build the "${name}" strategy.\n\nTell me:\n1. What type of tokens? (meme, blue chip, new listings, etc.)\n2. What metrics matter? (mcap, volume, holders, etc.)\n3. Any specific filters?\n\nWhen ready, say 'give me the strategy' and I'll generate it.`
                       };
-                      const newThread: ChatThread = { id: chatId, title: lang === "zh" ? "策略-新策略" : "Strategy-New", messages: [initMsg], createdAt: Date.now() };
+                      const newThread: ChatThread = { id: chatId, title: `${lang === "zh" ? "策略" : "Strategy"}-${name}`, messages: [initMsg], createdAt: Date.now() };
                       setChatThreads(prev => [newThread, ...prev]);
                       setActiveChatId(chatId);
                       setActiveView("chat");
