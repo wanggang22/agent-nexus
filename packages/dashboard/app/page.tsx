@@ -287,7 +287,7 @@ export default function Dashboard() {
         body: JSON.stringify({
           message: msg,
           wallet_address: wallet,
-          history: activeChat?.messages.slice(-10).map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text })) || [],
+          history: activeChat?.messages.slice(-20).map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text })) || [],
         }),
       });
 
