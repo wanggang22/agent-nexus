@@ -19,32 +19,41 @@ Ask anything about tokens, trading, or market data in Chinese or English.
 "聪明钱在买什么？"      → Smart money signals + whale alerts
 ```
 
-### 2. One-Click Token Launch
-Deploy your own meme coin with a single sentence. No Solidity knowledge needed.
+### 2. One-Click Token Launch (Clanker-style)
+Deploy your own meme coin with a single transaction. No Solidity knowledge needed.
 
 ```
-"发一个叫MOON的币"  →  Deploy ERC-20 + Create Uniswap V3 pool + Add liquidity
+"发一个叫MOON的币"  →  Deploy ERC-20 + Create Uniswap V3 pool + Add liquidity (1 TX)
 ```
 
-4-step process: Deploy → Create Pool (1% fee) → Approve → Add Liquidity. Sign 4 transactions in OKX Wallet and your token is live for trading.
+- **Single transaction** via MemeLaunchFactory — deploy + pool + liquidity all at once
+- **LP permanently locked** in factory contract — no rug pulls possible
+- **0.001 OKB** seed liquidity for active trading
+- **1% trading fees** go to token creator via `collectFees()`
+- Trade on [Uniswap (X Layer)](https://app.uniswap.org/swap?chain=xlayer)
 
 ### 3. Natural Language Trading
-Trade any token on X Layer with natural language. 500+ DEX liquidity sources aggregated.
+Trade any token on X Layer with natural language. Dual routing: OKX DEX Aggregator + Uniswap V3 fallback.
 
 ```
-"用 0.01 OKB 买 XDOG"  →  Quote via DYOR Swap → OKX Wallet sign → Done
+"用 0.01 OKB 买 XDOG"  →  Quote → OKX Wallet sign → Done
 ```
 
-Auto slippage detection: 0.5% for stablecoins, up to 15% for low-liquidity meme coins.
+- **OKX DEX Aggregator** for mainstream tokens (500+ liquidity sources)
+- **Uniswap V3 SwapRouter02** fallback for newly launched tokens
+- Auto slippage detection: 0.5% for stablecoins, up to 15% for low-liquidity meme coins
 
 ### 4. Strategy Automation
-Create monitoring strategies with natural language. System runs them automatically.
+Create monitoring strategies with natural language or via AI-guided chat.
 
 ```
 "帮我盯市值低于10万的新代币"  →  Strategy created, runs every 60 minutes
 ```
 
-Results pushed to your strategy dashboard. Pause, resume, or run manually anytime.
+- **AI Strategy Builder**: chat with AgentNexus to design strategy conditions
+- Directly calls Signal Agent (smart money, meme scan, trending) for real data
+- Claude AI filters results against your strategy conditions
+- Pause, resume, run manually, or collect fees anytime
 
 ### 5. x402 Payment Protocol
 Pay-per-use model built on the HTTP 402 standard.
@@ -86,8 +95,8 @@ Pay-per-use model built on the HTTP 402 standard.
 |-------|-----------|
 | AI Engine | Claude Sonnet 4.6 (Anthropic API) |
 | On-chain Data | OnchainOS v2.1 — 11 modules, 72 capabilities |
-| DEX | OKX DEX Aggregator (500+ liquidity sources) |
-| Token Launch | Custom ERC-20 + Uniswap V3 (Factory + NFPM on X Layer) |
+| DEX | OKX DEX Aggregator + Uniswap V3 SwapRouter02 (dual routing) |
+| Token Launch | MemeLaunchFactory (single-tx deploy, LP locked) + Uniswap V3 (official) |
 | Payment | x402 protocol (HTTP 402 + USDC on X Layer) |
 | Frontend | Next.js 14 + Tailwind CSS + react-markdown |
 | Backend | Node.js 20 + TypeScript (pnpm monorepo) |
@@ -110,7 +119,8 @@ agent-nexus/
 │   ├── twitter-bot/      # Twitter @mention interaction
 │   └── contracts/        # Solidity (AgentRegistry, PaymentLedger)
 └── contracts/
-    └── MemeToken.sol     # ERC-20 template for token launch
+    ├── MemeToken.sol           # ERC-20 template
+    └── MemeLaunchFactory.sol   # Single-tx launch with locked LP
 ```
 
 ## Smart Contracts (X Layer Mainnet)
@@ -120,13 +130,15 @@ agent-nexus/
 | AgentRegistry | [`0x294f885031544d7Af38D79fe1E9a5c87f3880DEA`](https://www.okx.com/web3/explorer/xlayer/address/0x294f885031544d7Af38D79fe1E9a5c87f3880DEA) |
 | PaymentLedger | [`0x00e0C1C17E9c3899A0bD362560Ea0Ab8112A4E05`](https://www.okx.com/web3/explorer/xlayer/address/0x00e0C1C17E9c3899A0bD362560Ea0Ab8112A4E05) |
 
-## Uniswap V3 on X Layer
+## Uniswap V3 on X Layer (Official Deployment)
 
 | Contract | Address |
 |----------|---------|
-| Factory | `0xb76c7abd3eb4b07ec14c5d7f9b265e8d37432e11` |
-| NonfungiblePositionManager | `0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86` |
-| WOKB | `0xe538905cf8410324e03A5A23C1c177a474D59b2b` |
+| Factory | [`0x4b2ab38dbf28d31d467aa8993f6c2585981d6804`](https://www.okx.com/web3/explorer/xlayer/address/0x4b2ab38dbf28d31d467aa8993f6c2585981d6804) |
+| NonfungiblePositionManager | [`0x315e413a11ab0df498ef83873012430ca36638ae`](https://www.okx.com/web3/explorer/xlayer/address/0x315e413a11ab0df498ef83873012430ca36638ae) |
+| SwapRouter02 | [`0x4f0c28f5926afda16bf2506d5d9e57ea190f9bca`](https://www.okx.com/web3/explorer/xlayer/address/0x4f0c28f5926afda16bf2506d5d9e57ea190f9bca) |
+| MemeLaunchFactory | [`0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a`](https://www.okx.com/web3/explorer/xlayer/address/0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a) |
+| WOKB | [`0xe538905cf8410324e03A5A23C1c177a474D59b2b`](https://www.okx.com/web3/explorer/xlayer/address/0xe538905cf8410324e03A5A23C1c177a474D59b2b) |
 
 ## Quick Start
 
