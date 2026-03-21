@@ -934,6 +934,42 @@ export default function Dashboard() {
                       </button>
                     )}
                   </div>
+
+                  {/* ── My Tokens list ── */}
+                  {launches.filter(l => l.status === "live").length > 0 && (
+                    <div className="mt-8">
+                      <h3 className="text-sm font-semibold text-nexus-muted mb-3">{lang === "zh" ? "我的代币" : "My Tokens"}</h3>
+                      <div className="space-y-2">
+                        {launches.filter(l => l.status === "live").map(l => (
+                          <div key={l.id} className="card flex items-center gap-3">
+                            <span className="w-2 h-2 rounded-full bg-nexus-green flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-white">{l.symbol}</p>
+                              <p className="text-[10px] font-mono text-nexus-muted truncate">{l.address}</p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <a href={`https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${l.address}`}
+                                 target="_blank" rel="noreferrer"
+                                 className="text-[10px] px-2 py-1 rounded-lg bg-nexus-accent/20 text-nexus-accent-light hover:bg-nexus-accent/30">
+                                {lang === "zh" ? "交易" : "Trade"}
+                              </a>
+                              {l.tokenId && (
+                                <button onClick={() => handleCollectFees(l.tokenId!)}
+                                  className="text-[10px] px-2 py-1 rounded-lg bg-nexus-green/20 text-nexus-green hover:bg-nexus-green/30">
+                                  {lang === "zh" ? "提取手续费" : "Collect"}
+                                </button>
+                              )}
+                              <a href={`https://www.okx.com/web3/explorer/xlayer/address/${l.address}`}
+                                 target="_blank" rel="noreferrer"
+                                 className="text-[10px] px-2 py-1 rounded-lg bg-white/5 text-nexus-muted hover:bg-white/10">
+                                {lang === "zh" ? "浏览器" : "Explorer"}
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
