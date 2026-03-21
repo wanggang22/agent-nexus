@@ -99,7 +99,7 @@ export default function Dashboard() {
   // ── Navigation ──
   type View = "chat" | "launch" | "strategy" | "wallet";
   const [activeView, setActiveView] = useState<View>("chat");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(typeof window !== "undefined" && window.innerWidth > 768);
 
   // ── Chat state ──
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
@@ -640,7 +640,7 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex bg-nexus-bg overflow-hidden">
       {/* ── Sidebar ── */}
-      <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex flex-col bg-nexus-card border-r border-nexus-border transition-all duration-200 flex-shrink-0`}>
+      <aside className={`${sidebarOpen ? "w-64" : "w-16"} ${sidebarOpen ? "absolute md:relative z-50 h-full" : "hidden md:flex"} flex flex-col bg-nexus-card border-r border-nexus-border transition-all duration-200 flex-shrink-0`}>
         {/* Header */}
         <div className="p-3 flex items-center gap-2 border-b border-nexus-border">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 rounded-lg hover:bg-white/5 text-nexus-muted hover:text-white">
@@ -780,6 +780,9 @@ export default function Dashboard() {
           </button>
         </div>
       </aside>
+
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />}
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
