@@ -1033,7 +1033,7 @@ app.post("/strategies", (req, res) => {
     walletAddress: wallet_address,
     name,
     description,
-    status: "running",
+    status: "paused",
     intervalMinutes: interval_minutes || 60,
     results: [],
     createdAt: new Date().toISOString(),
