@@ -182,13 +182,15 @@ export async function generateLaunchPlan(params: {
   let poolSqrtPriceX96: bigint;
 
   if (tokenIsToken0) {
+    // Set price exactly AT tickLower so liquidity is active and amount1 = 0
     tickLower = priceTick;
     tickUpper = MAX_TICK;
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - TICK_SPACING);
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick);
   } else {
     tickLower = MIN_TICK;
     tickUpper = priceTick;
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + TICK_SPACING);
+    // Set price exactly AT tickUpper so liquidity is active and amount0 = 0
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick);
   }
 
   const tradeUrl = `https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${predictedToken}`;
