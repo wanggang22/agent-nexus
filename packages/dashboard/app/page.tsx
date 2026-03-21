@@ -786,6 +786,21 @@ export default function Dashboard() {
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-3 px-3 py-2 border-b border-nexus-border bg-nexus-card flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded-lg hover:bg-white/5 text-nexus-muted">
+            <Icon d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </button>
+          <span className="text-sm font-bold text-gradient flex-1">AgentNexus</span>
+          <div className="flex gap-1">
+            {(["chat", "launch", "strategy"] as const).map(v => (
+              <button key={v} onClick={() => setActiveView(v)}
+                className={`px-2 py-1 rounded text-[10px] ${activeView === v ? "bg-nexus-green/15 text-nexus-green" : "text-nexus-muted"}`}>
+                {v === "chat" ? (lang === "zh" ? "聊天" : "Chat") : v === "launch" ? (lang === "zh" ? "发币" : "Launch") : (lang === "zh" ? "策略" : "Strategy")}
+              </button>
+            ))}
+          </div>
+        </div>
         {/* ── CHAT VIEW ── */}
         {activeView === "chat" && (
           <div className="flex-1 flex flex-col overflow-hidden">
