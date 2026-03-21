@@ -16,8 +16,8 @@ const LANG: Record<string, Record<string, string>> = {
     logout: "Logout", settings: "Settings",
     placeholder: "Ask anything about tokens, trading, analysis...",
     launchToken: "Launch Token", tokenName: "Token Name", tokenSymbol: "Token Symbol",
-    totalSupply: "Total Supply", okbLiquidity: "OKB for Liquidity",
-    launchDesc: "Deploy your meme coin on X Layer — Uniswap V3 pool, instant trading",
+    totalSupply: "Total Supply",
+    launchDesc: "Deploy your meme coin on X Layer — free, earn 1% trading fees",
     launching: "Launching...", step: "Step", of: "of",
     launchSuccess: "Token launched!", viewExplorer: "View on Explorer", launchAnother: "Launch Another",
     needOKXWallet: "Connect OKX Wallet to launch tokens",
@@ -44,8 +44,8 @@ const LANG: Record<string, Record<string, string>> = {
     logout: "退出", settings: "设置",
     placeholder: "问任何关于代币、交易、分析的问题...",
     launchToken: "发射代币", tokenName: "代币名称", tokenSymbol: "代币符号",
-    totalSupply: "总供应量", okbLiquidity: "OKB 流动性",
-    launchDesc: "在 X Layer 上发射你的 Meme 币 — Uniswap V3 池，即刻交易",
+    totalSupply: "总供应量",
+    launchDesc: "在 X Layer 上免费发射 Meme 币 — 赚取 1% 交易手续费",
     launching: "发射中...", step: "第", of: "步，共",
     launchSuccess: "代币发射成功！", viewExplorer: "在浏览器中查看", launchAnother: "继续发射",
     needOKXWallet: "请连接 OKX 钱包以发射代币",
@@ -130,7 +130,7 @@ export default function Dashboard() {
   const [launchName, setLaunchName] = useState("");
   const [launchSymbol, setLaunchSymbol] = useState("");
   const [launchSupply, setLaunchSupply] = useState("1000000000");
-  const [launchOKB, setLaunchOKB] = useState("0.1");
+  const [launchTradeUrl, setLaunchTradeUrl] = useState("");
   const [launchStep, setLaunchStep] = useState(0);
   const [launchTotal, setLaunchTotal] = useState(0);
   const [launchLoading, setLaunchLoading] = useState(false);
@@ -431,7 +431,7 @@ export default function Dashboard() {
       const resp = await fetch(`${GATEWAY}/launch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: launchName, symbol: launchSymbol, totalSupply: launchSupply, okbForLiquidity: launchOKB, from: wallet }),
+        body: JSON.stringify({ name: launchName, symbol: launchSymbol, totalSupply: launchSupply, from: wallet }),
       });
 
       // x402 / rate limit: handle payment required
@@ -472,6 +472,7 @@ export default function Dashboard() {
       }
 
       setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, address: deployedAddress, status: "live" as const } : l));
+      setLaunchTradeUrl(plan.tradeUrl || "");
       setLaunchName(""); setLaunchSymbol("");
     } catch (e: any) {
       setLaunches(prev => prev.map(l => l.id === launchId ? { ...l, status: "draft" as const } : l));
@@ -825,11 +826,19 @@ export default function Dashboard() {
                   <h2 className="text-xl font-bold text-nexus-green mb-2">{t.launchSuccess}</h2>
                   <p className="text-lg font-mono text-white mb-1">{activeLaunch.symbol}</p>
                   <p className="font-mono text-xs text-nexus-accent-light break-all mb-6">{activeLaunch.address}</p>
-                  <div className="flex gap-3 justify-center">
-                    <a href={`https://www.okx.com/web3/explorer/xlayer/address/${activeLaunch.address}`}
-                       target="_blank" rel="noreferrer" className="btn-primary text-sm">{t.viewExplorer}</a>
-                    <button onClick={() => { setActiveLaunchId(null); setLaunchName(""); setLaunchSymbol(""); }}
-                      className="btn-secondary text-sm">{t.launchAnother}</button>
+                  <div className="flex flex-col gap-3 items-center">
+                    <div className="flex gap-3">
+                      <a href={`https://www.okx.com/web3/explorer/xlayer/address/${activeLaunch.address}`}
+                         target="_blank" rel="noreferrer" className="btn-primary text-sm">{t.viewExplorer}</a>
+                      <button onClick={() => { setActiveLaunchId(null); setLaunchName(""); setLaunchSymbol(""); setLaunchTradeUrl(""); }}
+                        className="btn-secondary text-sm">{t.launchAnother}</button>
+                    </div>
+                    {launchTradeUrl && (
+                      <a href={launchTradeUrl} target="_blank" rel="noreferrer"
+                         className="btn-primary text-sm bg-nexus-accent hover:bg-nexus-accent/85">
+                        {lang === "zh" ? "在 OKX DEX 交易" : "Trade on OKX DEX"} &#x2197;
+                      </a>
+                    )}
                   </div>
                 </div>
               ) : walletMode !== "okx" || !wallet ? (
@@ -857,15 +866,9 @@ export default function Dashboard() {
                         <input type="text" className="input" placeholder="e.g. MDOG"
                           value={launchSymbol} onChange={e => setLaunchSymbol(e.target.value.toUpperCase())} disabled={launchLoading} />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-nexus-muted mb-1">{t.totalSupply}</label>
-                          <input type="text" className="input" value={launchSupply} onChange={e => setLaunchSupply(e.target.value)} disabled={launchLoading} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-nexus-muted mb-1">{t.okbLiquidity}</label>
-                          <input type="text" className="input" value={launchOKB} onChange={e => setLaunchOKB(e.target.value)} disabled={launchLoading} />
-                        </div>
+                      <div>
+                        <label className="block text-xs text-nexus-muted mb-1">{t.totalSupply}</label>
+                        <input type="text" className="input" value={launchSupply} onChange={e => setLaunchSupply(e.target.value)} disabled={launchLoading} />
                       </div>
                     </div>
 
@@ -873,7 +876,9 @@ export default function Dashboard() {
                       <div className="flex justify-between"><span>Network</span><span className="text-white">X Layer</span></div>
                       <div className="flex justify-between"><span>DEX</span><span className="text-white">Uniswap V3 (1% fee)</span></div>
                       <div className="flex justify-between"><span>Pair</span><span className="text-white">{launchSymbol || "TOKEN"}/WOKB</span></div>
-                      <div className="flex justify-between"><span>LP Range</span><span className="text-white">Full Range</span></div>
+                      <div className="flex justify-between"><span>{lang === "zh" ? "模式" : "Mode"}</span><span className="text-nexus-green">{lang === "zh" ? "免费 · 单边流动性" : "Free · Single-sided"}</span></div>
+                      <div className="flex justify-between"><span>{lang === "zh" ? "初始市值" : "Initial MCap"}</span><span className="text-white">~50 OKB (~$4,400)</span></div>
+                      <div className="flex justify-between"><span>{lang === "zh" ? "收入" : "Revenue"}</span><span className="text-white">{lang === "zh" ? "1% 交易手续费" : "1% trading fees"}</span></div>
                     </div>
 
                     {launchLoading ? (

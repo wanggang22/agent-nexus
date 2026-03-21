@@ -1133,7 +1133,7 @@ setInterval(runDueStrategies, 5 * 60 * 1000);
 
 // ── Token Launch: generate deploy + pool creation transactions ──
 app.post("/launch", async (req, res) => {
-  const { name, symbol, totalSupply, okbForLiquidity, from } = req.body;
+  const { name, symbol, totalSupply, from } = req.body;
   if (!name || !symbol || !from) {
     return res.status(400).json({ error: "name, symbol, from required" });
   }
@@ -1149,7 +1149,6 @@ app.post("/launch", async (req, res) => {
       name,
       symbol,
       totalSupply: totalSupply || "1000000000",
-      okbForLiquidity: okbForLiquidity || "0.1",
       from,
     });
     res.json(plan);

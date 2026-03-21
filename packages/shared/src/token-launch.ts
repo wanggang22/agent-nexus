@@ -1,9 +1,10 @@
 /**
  * Token Launch Module — Clanker-style deploy on X Layer
  *
- * Flow:  deploy ERC-20  →  create Uniswap V3 pool  →  approve  →  add full-range liquidity
+ * Flow:  deploy ERC-20  →  create Uniswap V3 pool  →  approve  →  add single-sided liquidity
  *
- * All functions return unsigned transaction objects for the frontend (OKX Wallet) to sign.
+ * Single-sided: 100% tokens go into pool, user pays zero OKB.
+ * Revenue comes from 1% trading fees on the Uniswap V3 pool.
  */
 
 // ── Addresses on X Layer ──
@@ -12,6 +13,13 @@ export const UNISWAP_V3_FACTORY = "0xb76c7abd3eb4b07ec14c5d7f9b265e8d37432e11";
 export const UNISWAP_V3_NFPM = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
 export const XLAYER_RPC = "https://rpc.xlayer.tech";
 export const XLAYER_CHAIN_ID_HEX = "0xc4";
+
+// ── Default launch params ──
+const DEFAULT_TOTAL_SUPPLY = "1000000000"; // 1 billion
+const DEFAULT_INITIAL_MCAP_OKB = 50; // ~$4400 initial market cap
+const TICK_SPACING = 200; // 1% fee tier
+const MAX_TICK = 887200; // max tick aligned to spacing 200
+const MIN_TICK = -887200;
 
 // ── Compiled ERC-20 bytecode ──
 // Source: contracts/MemeToken.sol — Solidity 0.8.34, optimizer 200 runs
@@ -49,6 +57,18 @@ function encodeInt256(n: bigint): string {
   return (BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") + n + 1n).toString(16);
 }
 
+/** Convert a price to the nearest tick, aligned to TICK_SPACING */
+function priceToTick(price: number): number {
+  const rawTick = Math.log(price) / Math.log(1.0001);
+  return Math.floor(rawTick / TICK_SPACING) * TICK_SPACING;
+}
+
+/** Convert a tick to sqrtPriceX96 */
+function tickToSqrtPriceX96(tick: number): bigint {
+  const sqrtPrice = Math.sqrt(1.0001 ** tick);
+  return BigInt(Math.floor(sqrtPrice * 2 ** 96));
+}
+
 // ── Transaction builders ──
 
 export type TxData = { to: string | null; data: string; value: string; chainId: string; gas?: string };
@@ -62,21 +82,16 @@ export function buildDeployTokenTx(p: {
     data: "0x" + MEME_TOKEN_BYTECODE + encodeConstructorArgs(p.name, p.symbol, supply),
     value: "0x0",
     chainId: XLAYER_CHAIN_ID_HEX,
-    gas: "0x200000", // 2M gas for contract deploy
+    gas: "0x200000",
   };
 }
 
 export function buildCreatePoolTx(p: {
-  tokenAddress: string; initialPriceOKB: string; from: string;
+  tokenAddress: string; sqrtPriceX96: bigint; from: string;
 }): TxData {
   const token = p.tokenAddress.toLowerCase();
   const wokb = XLAYER_WOKB.toLowerCase();
   const [token0, token1] = token < wokb ? [token, wokb] : [wokb, token];
-  const tokenIsToken0 = token < wokb;
-
-  const priceOKB = parseFloat(p.initialPriceOKB);
-  const priceRatio = tokenIsToken0 ? priceOKB : 1 / priceOKB;
-  const sqrtPriceX96 = BigInt(Math.floor(Math.sqrt(priceRatio) * 2 ** 96));
 
   const fee = 10000n; // 1%
   // createAndInitializePoolIfNecessary(address,address,uint24,uint160)
@@ -84,9 +99,9 @@ export function buildCreatePoolTx(p: {
     token0.replace("0x", "").padStart(64, "0") +
     token1.replace("0x", "").padStart(64, "0") +
     encodeUint256(fee) +
-    encodeUint256(sqrtPriceX96);
+    encodeUint256(p.sqrtPriceX96);
 
-  return { to: UNISWAP_V3_NFPM, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x100000" }; // 1M gas
+  return { to: UNISWAP_V3_NFPM, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x100000" };
 }
 
 export function buildApproveNFPMTx(p: {
@@ -95,11 +110,15 @@ export function buildApproveNFPMTx(p: {
   const data = "0x095ea7b3" +
     UNISWAP_V3_NFPM.replace("0x", "").toLowerCase().padStart(64, "0") +
     encodeUint256(p.amount);
-  return { to: p.tokenAddress, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x20000" }; // 128K gas
+  return { to: p.tokenAddress, data, value: "0x0", chainId: XLAYER_CHAIN_ID_HEX, gas: "0x20000" };
 }
 
-export function buildAddLiquidityTx(p: {
-  tokenAddress: string; tokenAmount: string; okbAmount: string; from: string; deadline?: number;
+/**
+ * Build single-sided liquidity tx — only meme tokens, zero OKB.
+ */
+export function buildAddSingleSidedLiquidityTx(p: {
+  tokenAddress: string; tokenAmount: string; tickLower: number; tickUpper: number;
+  from: string; deadline?: number;
 }): TxData {
   const token = p.tokenAddress.toLowerCase();
   const wokb = XLAYER_WOKB.toLowerCase();
@@ -107,30 +126,29 @@ export function buildAddLiquidityTx(p: {
   const tokenIsToken0 = token < wokb;
 
   const tokenWei = BigInt(p.tokenAmount) * 10n ** 18n;
-  const okbWei = BigInt(Math.floor(parseFloat(p.okbAmount) * 1e18));
-  const amount0 = tokenIsToken0 ? tokenWei : okbWei;
-  const amount1 = tokenIsToken0 ? okbWei : tokenWei;
+  const amount0 = tokenIsToken0 ? tokenWei : 0n;
+  const amount1 = tokenIsToken0 ? 0n : tokenWei;
   const deadline = BigInt(p.deadline || Math.floor(Date.now() / 1000) + 3600);
 
   // mint((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256))
   const data = "0x88316456" +
     token0.replace("0x", "").padStart(64, "0") +
     token1.replace("0x", "").padStart(64, "0") +
-    encodeUint256(10000n) +              // fee 1%
-    encodeInt256(-887200n) +             // tickLower (full range, aligned to tickSpacing=200)
-    encodeInt256(887200n) +              // tickUpper
-    encodeUint256(amount0) +
-    encodeUint256(amount1) +
-    encodeUint256(amount0 * 95n / 100n) + // amount0Min (5% slippage protection)
-    encodeUint256(amount1 * 95n / 100n) + // amount1Min (5% slippage protection)
+    encodeUint256(10000n) +                    // fee 1%
+    encodeInt256(BigInt(p.tickLower)) +         // tickLower
+    encodeInt256(BigInt(p.tickUpper)) +         // tickUpper
+    encodeUint256(amount0) +                    // amount0Desired
+    encodeUint256(amount1) +                    // amount1Desired
+    encodeUint256(amount0 * 95n / 100n) +       // amount0Min (5% slippage)
+    encodeUint256(amount1 * 95n / 100n) +       // amount1Min (5% slippage)
     p.from.replace("0x", "").toLowerCase().padStart(64, "0") +
     encodeUint256(deadline);
 
   return {
     to: UNISWAP_V3_NFPM, data,
-    value: "0x" + okbWei.toString(16),   // send native OKB (auto-wraps)
+    value: "0x0", // no OKB needed!
     chainId: XLAYER_CHAIN_ID_HEX,
-    gas: "0x200000", // 2M gas for add liquidity
+    gas: "0x200000",
   };
 }
 
@@ -165,37 +183,72 @@ export interface LaunchPlan {
   tokenName: string;
   tokenSymbol: string;
   totalSupply: string;
+  initialMarketCapOKB: number;
   initialPriceOKB: string;
-  liquidityTokenAmount: string;
-  liquidityOKBAmount: string;
   predictedAddress: string;
+  tradeUrl: string;
   transactions: { step: string; description: string; tx: TxData }[];
 }
 
+/**
+ * Generate a Clanker-style launch plan.
+ * - 100% tokens → single-sided Uniswap V3 liquidity
+ * - Zero OKB required from user
+ * - Revenue from 1% trading fees
+ */
 export async function generateLaunchPlan(params: {
   name: string;
   symbol: string;
   totalSupply?: string;
-  initialPriceOKB?: string;
-  liquidityPercent?: number;
-  okbForLiquidity?: string;
+  initialMarketCapOKB?: number;
   from: string;
 }): Promise<LaunchPlan> {
-  const totalSupply = params.totalSupply || "1000000000";
-  const liquidityPercent = params.liquidityPercent ?? 100;
-  const okbAmount = params.okbForLiquidity || "0.1";
-  const liquidityTokens = Math.floor(parseInt(totalSupply) * liquidityPercent / 100);
-  const initialPrice = params.initialPriceOKB || (parseFloat(okbAmount) / liquidityTokens).toFixed(18);
+  const totalSupply = params.totalSupply || DEFAULT_TOTAL_SUPPLY;
+  const mcapOKB = params.initialMarketCapOKB ?? DEFAULT_INITIAL_MCAP_OKB;
+  const supplyNum = parseInt(totalSupply);
+  const pricePerToken = mcapOKB / supplyNum; // OKB per token
+
   const predictedAddress = await predictContractAddress(params.from);
+  const token = predictedAddress.toLowerCase();
+  const wokb = XLAYER_WOKB.toLowerCase();
+  const tokenIsToken0 = token < wokb;
+
+  // Calculate V3 price (token1/token0 ratio)
+  // If token is token0: v3price = WOKB/token = pricePerToken
+  // If token is token1: v3price = token/WOKB = 1/pricePerToken
+  const v3Price = tokenIsToken0 ? pricePerToken : 1 / pricePerToken;
+  const priceTick = priceToTick(v3Price);
+
+  let tickLower: number;
+  let tickUpper: number;
+  let poolSqrtPriceX96: bigint;
+
+  if (tokenIsToken0) {
+    // Token is token0: single-sided deposit needs current price < tickLower
+    // Range: [priceTick, MAX_TICK] — covers from initial price up to max
+    tickLower = priceTick;
+    tickUpper = MAX_TICK;
+    // Set pool price 1 tick spacing below range
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - TICK_SPACING);
+  } else {
+    // Token is token1: single-sided deposit needs current price > tickUpper
+    // Range: [MIN_TICK, priceTick] — covers from min to initial price
+    tickLower = MIN_TICK;
+    tickUpper = priceTick;
+    // Set pool price 1 tick spacing above range
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + TICK_SPACING);
+  }
+
+  const tradeUrl = `https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${predictedAddress}`;
 
   return {
     tokenName: params.name,
     tokenSymbol: params.symbol,
     totalSupply,
-    initialPriceOKB: initialPrice,
-    liquidityTokenAmount: liquidityTokens.toString(),
-    liquidityOKBAmount: okbAmount,
+    initialMarketCapOKB: mcapOKB,
+    initialPriceOKB: pricePerToken.toExponential(4),
     predictedAddress,
+    tradeUrl,
     transactions: [
       {
         step: "deploy",
@@ -205,17 +258,23 @@ export async function generateLaunchPlan(params: {
       {
         step: "createPool",
         description: `Create ${params.symbol}/WOKB pool on Uniswap V3 (1% fee)`,
-        tx: buildCreatePoolTx({ tokenAddress: predictedAddress, initialPriceOKB: initialPrice, from: params.from }),
+        tx: buildCreatePoolTx({ tokenAddress: predictedAddress, sqrtPriceX96: poolSqrtPriceX96, from: params.from }),
       },
       {
         step: "approve",
         description: `Approve ${params.symbol} for liquidity pool`,
-        tx: buildApproveNFPMTx({ tokenAddress: predictedAddress, amount: BigInt(liquidityTokens) * 10n ** 18n, from: params.from }),
+        tx: buildApproveNFPMTx({ tokenAddress: predictedAddress, amount: BigInt(totalSupply) * 10n ** 18n, from: params.from }),
       },
       {
         step: "addLiquidity",
-        description: `Add liquidity: ${Number(liquidityTokens).toLocaleString()} ${params.symbol} + ${okbAmount} OKB`,
-        tx: buildAddLiquidityTx({ tokenAddress: predictedAddress, tokenAmount: liquidityTokens.toString(), okbAmount, from: params.from }),
+        description: `Add single-sided liquidity: ${Number(totalSupply).toLocaleString()} ${params.symbol} (zero OKB)`,
+        tx: buildAddSingleSidedLiquidityTx({
+          tokenAddress: predictedAddress,
+          tokenAmount: totalSupply,
+          tickLower,
+          tickUpper,
+          from: params.from,
+        }),
       },
     ],
   };
