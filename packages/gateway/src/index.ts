@@ -60,7 +60,7 @@ const aiLimiter = rateLimit({
     if (ua.includes("AgentNexus")) return true; // internal service calls
 
     // Paid users (have credits) skip rate limit, deduct 1 credit per request
-    const wallet = req.body?.wallet_address || req.headers["x-wallet-address"] as string;
+    const wallet = req.body?.wallet_address || req.body?.from || req.headers["x-wallet-address"] as string;
     if (!wallet) return false;
     const key = wallet.toLowerCase();
     const user = creditsStoreRef[key];
