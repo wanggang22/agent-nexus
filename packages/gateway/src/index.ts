@@ -1158,7 +1158,7 @@ app.post("/launch", async (req, res) => {
 });
 
 app.post("/chat", async (req, res) => {
-  const { message, chain, platform, user_id, wallet_address } = req.body;
+  const { message, chain, platform, user_id, wallet_address, history } = req.body;
   const targetChain = chain || "xlayer";
 
   if (!message || typeof message !== "string") {
@@ -1175,7 +1175,12 @@ app.post("/chat", async (req, res) => {
     const intentMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 600,
-      messages: [{ role: "user", content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY compact JSON, no whitespace.` }],
+      messages: [
+        ...(Array.isArray(history) && history.length > 0
+          ? [{ role: "user" as const, content: `${INTENT_PROMPT}\n\nConversation history:\n${history.map((h: any) => `${h.role}: ${h.content}`).join("\n")}\n\nLatest user message: "${message}"\n\nReturn ONLY compact JSON, no whitespace.` }]
+          : [{ role: "user" as const, content: `${INTENT_PROMPT}\n\nUser message: "${message}"\n\nReturn ONLY compact JSON, no whitespace.` }]
+        ),
+      ],
     });
 
     const intentText = intentMsg.content[0].type === "text" ? intentMsg.content[0].text : "{}";

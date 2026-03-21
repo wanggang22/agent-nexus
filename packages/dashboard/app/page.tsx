@@ -284,7 +284,11 @@ export default function Dashboard() {
       const resp = await fetch(`${GATEWAY}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, wallet_address: wallet }),
+        body: JSON.stringify({
+          message: msg,
+          wallet_address: wallet,
+          history: activeChat?.messages.slice(-10).map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text })) || [],
+        }),
       });
 
       // x402: handle payment required
