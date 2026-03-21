@@ -1081,18 +1081,35 @@ app.post("/strategies/:id/run", async (req, res) => {
   }
 
   try {
-    // Execute strategy by sending the description to /chat internally
-    const chatResp = await fetch(`http://localhost:${PORT}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: `帮我查一下 X Layer 上的代币：${strategy.description.slice(0, 200)}`, wallet_address: strategy.walletAddress }),
-      signal: AbortSignal.timeout(30000),
+    // Execute strategy: directly call signal agents for real data
+    const signalEndpoints = [
+      `${SIGNAL_URL}/signals/smart-money?chain=xlayer`,
+      `${SIGNAL_URL}/signals/meme-scan?chain=xlayer`,
+      `${SIGNAL_URL}/signals/trending?chain=xlayer`,
+    ];
+
+    const signalResults = await Promise.all(
+      signalEndpoints.map(async (url) => {
+        try {
+          const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "AgentNexus" } });
+          return await r.json();
+        } catch { return null; }
+      })
+    );
+
+    // Summarize with Claude based on strategy description
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    const summaryMsg = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 800,
+      messages: [{ role: "user", content: `你是代币分析助手。用户的策略筛选条件是：${strategy.description}\n\n以下是链上实时数据：\n${JSON.stringify(signalResults.filter(Boolean), null, 2).slice(0, 3000)}\n\n请根据用户的筛选条件，从数据中找出符合条件的代币，给出简洁的结果列表。如果没有符合条件的，说明原因。` }],
     });
-    const chatData = await chatResp.json() as any;
+
+    const summary = summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "No results";
 
     const result = {
       timestamp: new Date().toISOString(),
-      summary: chatData.reply || chatData.error || "No results",
+      summary,
     };
 
     strategy.results.unshift(result);
