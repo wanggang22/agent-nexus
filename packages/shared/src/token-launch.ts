@@ -12,7 +12,7 @@
 export const XLAYER_WOKB = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
 export const UNISWAP_V3_FACTORY = "0xb76c7abd3eb4b07ec14c5d7f9b265e8d37432e11";
 export const UNISWAP_V3_NFPM = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
-export const LAUNCH_FACTORY = "0x520e9c99b3eeda5054988e98ba5de80f023f6d07";
+export const LAUNCH_FACTORY = "0x05bb9cafaa9f7f6e1fe83cc8f608194755be12aa";
 export const XLAYER_RPC = "https://rpc.xlayer.tech";
 export const XLAYER_CHAIN_ID_HEX = "0xc4";
 

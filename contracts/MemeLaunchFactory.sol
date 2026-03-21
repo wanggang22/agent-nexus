@@ -23,6 +23,17 @@ interface INonfungiblePositionManager {
     function mint(MintParams calldata params) external payable returns (
         uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1
     );
+
+    struct CollectParams {
+        uint256 tokenId;
+        address recipient;
+        uint128 amount0Max;
+        uint128 amount1Max;
+    }
+
+    function collect(CollectParams calldata params) external payable returns (
+        uint256 amount0, uint256 amount1
+    );
 }
 
 contract MemeToken {
@@ -76,6 +87,11 @@ contract MemeLaunchFactory {
     address public immutable wokb;
     uint24 public constant FEE = 10000; // 1%
 
+    // LP NFT ownership: tokenId → creator (for fee collection only)
+    mapping(uint256 => address) public lpCreator;
+    // Token → creator
+    mapping(address => address) public tokenCreator;
+
     event TokenLaunched(
         address indexed creator,
         address indexed token,
@@ -113,7 +129,7 @@ contract MemeLaunchFactory {
         // 4. Approve NFPM to spend tokens
         MemeToken(token).approve(nfpm, totalSupply);
 
-        // 5. Add single-sided liquidity — LP NFT goes to msg.sender (creator)
+        // 5. Add single-sided liquidity — LP NFT stays in this contract (LOCKED)
         bool tokenIsToken0 = token < wokb;
         uint256 amount0 = tokenIsToken0 ? totalSupply : 0;
         uint256 amount1 = tokenIsToken0 ? 0 : totalSupply;
@@ -129,11 +145,35 @@ contract MemeLaunchFactory {
                 amount1Desired: amount1,
                 amount0Min: amount0 * 95 / 100,
                 amount1Min: amount1 * 95 / 100,
-                recipient: msg.sender,
+                recipient: address(this), // LP locked in factory forever
                 deadline: block.timestamp + 3600
             })
         );
 
+        // Record creator for fee collection
+        lpCreator[tokenId] = msg.sender;
+        tokenCreator[token] = msg.sender;
+
         emit TokenLaunched(msg.sender, token, pool, tokenId);
     }
+
+    /**
+     * Collect trading fees — only the original creator can call.
+     * Fees are forwarded to the creator. LP stays locked.
+     */
+    function collectFees(uint256 tokenId) external {
+        require(lpCreator[tokenId] == msg.sender, "Not creator");
+
+        // Collect max fees
+        INonfungiblePositionManager(nfpm).collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: tokenId,
+                recipient: msg.sender, // fees go to creator
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+            })
+        );
+    }
+
+    // No decreaseLiquidity, no transfer — LP is permanently locked
 }

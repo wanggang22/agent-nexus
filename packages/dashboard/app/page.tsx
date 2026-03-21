@@ -498,23 +498,18 @@ export default function Dashboard() {
     }
   };
 
-  // ── Collect LP fees ──
-  const NFPM_ADDRESS = "0x8f56331c494ea64e60ab4fb7d1cd38a09230fe86";
+  // ── Collect LP fees via factory ──
+  const FACTORY_ADDRESS = "0x05bb9cafaa9f7f6e1fe83cc8f608194755be12aa";
   const handleCollectFees = async (tokenId: string) => {
     if (!wallet || walletMode !== "okx") return;
     const provider = (window as any).okxwallet;
     if (!provider) return;
     try {
-      const MAX_UINT128 = "0x" + "f".repeat(32); // max uint128
-      // collect((uint256,address,uint128,uint128)) = 0xfc6f7865
-      const data = "0xfc6f7865" +
-        BigInt(tokenId).toString(16).padStart(64, "0") +
-        wallet.replace("0x", "").toLowerCase().padStart(64, "0") +
-        MAX_UINT128.replace("0x", "").padStart(64, "0") +
-        MAX_UINT128.replace("0x", "").padStart(64, "0");
+      // collectFees(uint256) selector = 0xb17acdcd
+      const data = "0xb17acdcd" + BigInt(tokenId).toString(16).padStart(64, "0");
       const txHash = await provider.request({
         method: "eth_sendTransaction",
-        params: [{ from: wallet, to: NFPM_ADDRESS, data, value: "0x0", chainId: "0xc4", gas: "0x30000" }],
+        params: [{ from: wallet, to: FACTORY_ADDRESS, data, value: "0x0", chainId: "0xc4", gas: "0x50000" }],
       });
       alert(lang === "zh" ? `手续费提取交易已发送: ${txHash}` : `Fees collected! TX: ${txHash}`);
     } catch (e: any) {
