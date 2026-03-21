@@ -90,7 +90,9 @@ app.use("/analysis", aiLimiter);
 app.use("/risk", aiLimiter);
 app.use("/trade", aiLimiter);
 app.use("/launch", aiLimiter);
-app.use("/strategies", aiLimiter);
+// Only rate-limit strategy creation and execution (POST), not GET/DELETE/PATCH
+app.post("/strategies", aiLimiter);
+app.post("/strategies/:id/run", aiLimiter);
 
 // ── Shared session store: unlocked wallets with TTL ──
 const SESSION_TTL = 365 * 24 * 60 * 60 * 1000; // permanent (until /lock or server restart)
