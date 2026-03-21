@@ -412,28 +412,15 @@ const AGENTS = [
     ],
   },
   {
-    name: "Analyst Agent — Basic (FREE)",
-    description: "Rule-based analysis from OnchainOS data — no AI, instant results",
+    name: "Analyst Agent",
+    description: "AI-powered deep analysis by Claude — comprehensive token analysis",
     endpoint: ANALYST_URL,
     services: [
-      { method: "GET", route: "/basic/technical/:token", price: "free", description: "Basic technical analysis (rule-based)" },
-      { method: "GET", route: "/basic/fundamental/:token", price: "free", description: "Basic fundamental analysis (rule-based)" },
-      { method: "GET", route: "/basic/spread/:token", price: "free", description: "Basic DEX price info" },
-      { method: "GET", route: "/basic/meme/:token", price: "free", description: "Basic meme data (smart money, KOL, risks)" },
-      { method: "GET", route: "/basic/full/:token", price: "free", description: "Basic full analysis (all dimensions, rule-based)" },
-      { method: "GET", route: "/basic/meme-deep/:token", price: "free", description: "Meme deep data: bundle/sniper detection + dev info" },
-    ],
-  },
-  {
-    name: "Analyst Agent — Deep (PAID)",
-    description: "AI-powered deep analysis by Claude — cultural insight, predictions, recommendations",
-    endpoint: ANALYST_URL,
-    services: [
-      { method: "GET", route: "/analysis/technical/:token", price: "$0.02", description: "Deep technical analysis (AI)" },
-      { method: "GET", route: "/analysis/fundamental/:token", price: "$0.03", description: "Deep fundamental analysis (AI)" },
-      { method: "GET", route: "/analysis/spread/:token", price: "$0.01", description: "Deep CEX-DEX arbitrage analysis (AI)" },
-      { method: "GET", route: "/analysis/meme/:token", price: "$0.03", description: "Deep meme virality + cultural analysis (AI)" },
-      { method: "GET", route: "/analysis/full/:token", price: "$0.08", description: "Deep full analysis — all dimensions (AI)" },
+      { method: "GET", route: "/analysis/technical/:token", price: "free", description: "Technical analysis (AI)" },
+      { method: "GET", route: "/analysis/fundamental/:token", price: "free", description: "Fundamental analysis (AI)" },
+      { method: "GET", route: "/analysis/spread/:token", price: "free", description: "CEX-DEX spread analysis (AI)" },
+      { method: "GET", route: "/analysis/meme/:token", price: "free", description: "Meme virality + cultural analysis (AI)" },
+      { method: "GET", route: "/analysis/full/:token", price: "free", description: "Full analysis — all dimensions (AI)" },
     ],
   },
   {
@@ -513,20 +500,12 @@ SIGNAL (free):
 - GET /signals/token-pnl?wallet={wallet}&token={token} — PnL for specific token
 - POST /signals/batch-prices (body: {addresses: [...]}) — batch price query
 
-ANALYST BASIC (free, rule-based):
-- GET /basic/technical/{token} — basic technical analysis
-- GET /basic/fundamental/{token} — basic fundamental analysis
-- GET /basic/spread/{token} — basic price data
-- GET /basic/meme/{token} — basic meme data (smart money, KOL, risks)
-- GET /basic/meme-deep/{token} — meme deep data: bundle/sniper detection + dev info
-- GET /basic/full/{token} — basic full analysis
-
-ANALYST DEEP (paid, Claude AI):
-- GET /analysis/technical/{token} — deep technical analysis ($0.02)
-- GET /analysis/fundamental/{token} — deep fundamental analysis ($0.03)
-- GET /analysis/spread/{token} — deep CEX-DEX spread ($0.01)
-- GET /analysis/meme/{token} — deep meme virality + cultural ($0.03)
-- GET /analysis/full/{token} — deep full analysis ($0.08)
+ANALYST (free, AI-powered):
+- GET /analysis/technical/{token} — technical analysis (AI)
+- GET /analysis/fundamental/{token} — fundamental analysis (AI)
+- GET /analysis/spread/{token} — CEX-DEX spread analysis (AI)
+- GET /analysis/meme/{token} — meme virality + cultural analysis (AI)
+- GET /analysis/full/{token} — full analysis — all dimensions (AI)
 
 RISK (free):
 - POST /risk/assess (body: {token, chain}) — pre-trade risk
