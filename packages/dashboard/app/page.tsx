@@ -295,6 +295,7 @@ export default function Dashboard() {
           wallet_address: wallet,
           history: activeChat?.messages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text })) || [],
           no_auto_strategy: activeChat?.title?.startsWith(lang === "zh" ? "策略" : "Strategy") || false,
+          strategy_chat: activeChat?.title?.startsWith(lang === "zh" ? "策略" : "Strategy") || false,
         }),
       });
 

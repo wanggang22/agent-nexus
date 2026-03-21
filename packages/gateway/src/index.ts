@@ -1160,7 +1160,7 @@ app.post("/launch", async (req, res) => {
 });
 
 app.post("/chat", async (req, res) => {
-  const { message, chain, platform, user_id, wallet_address, history, no_auto_strategy } = req.body;
+  const { message, chain, platform, user_id, wallet_address, history, no_auto_strategy, strategy_chat } = req.body;
   const targetChain = chain || "xlayer";
 
   if (!message || typeof message !== "string") {
@@ -1172,8 +1172,36 @@ app.post("/chat", async (req, res) => {
   }
 
   try {
-    // Step 1: Parse intent with Claude
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+
+    // Strategy chat mode: pure conversation, no agent routing
+    if (strategy_chat) {
+      const strategySystemPrompt = `你是 AgentNexus 的策略制定助手。你的任务是帮用户制定代币筛选策略。
+
+规则：
+1. 跟用户讨论他们想要什么样的策略
+2. 当用户说"给我策略条件"或类似的话时，输出一句简短的筛选条件（不超过100字）
+3. 筛选条件的格式示例："找 X Layer 上市值低于10万美元、聪明钱近期买入、Twitter讨论度上升的meme代币"
+4. 不要输出表格、详情、注意事项，只输出一句精简的筛选条件
+5. 可用的筛选维度：市值、交易量、持仓人数、聪明钱买入、鲸鱼异动、社交热度、meme叙事、价格趋势`;
+
+      const messages = [
+        ...(Array.isArray(history) ? history.map((h: any) => ({ role: h.role as "user" | "assistant", content: h.content })) : []),
+        { role: "user" as const, content: message },
+      ];
+
+      const chatResp = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 500,
+        system: strategySystemPrompt,
+        messages,
+      });
+
+      const reply = chatResp.content[0].type === "text" ? chatResp.content[0].text : "";
+      return res.json({ reply, results: [] });
+    }
+
+    // Step 1: Parse intent with Claude
     const intentMsg = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 600,
