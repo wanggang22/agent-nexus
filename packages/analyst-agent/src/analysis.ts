@@ -56,6 +56,7 @@ async function gatherMarketData(tokenAddress: string, chain: string): Promise<Re
     tokenInfo: await runOnchainosAsync(`token advanced-info --address ${tokenAddress} --chain ${chain}`),
     holders: await runOnchainosAsync(`token holders --address ${tokenAddress} --chain ${chain}`),
     liquidity: await runOnchainosAsync(`token liquidity --address ${tokenAddress} --chain ${chain}`),
+    priceInfo: await runOnchainosAsync(`token price-info --address ${tokenAddress} --chain ${chain}`),
   };
 }
 
@@ -358,6 +359,8 @@ export async function basicFundamental(tokenAddress: string, chain = "xlayer"): 
   const info = safeJsonParse(data.tokenInfo);
   const holdersRaw = safeJsonParse(data.holders);
   const liqRaw = safeJsonParse(data.liquidity);
+  const priceInfoRaw = safeJsonParse(data.priceInfo);
+  const priceInfo = priceInfoRaw?.data?.[0] || priceInfoRaw?.data || {};
 
   let concentration: "low_risk" | "medium_risk" | "high_risk" = "medium_risk";
   let honeypot = false;
@@ -374,10 +377,11 @@ export async function basicFundamental(tokenAddress: string, chain = "xlayer"): 
   sellTax = parseFloat(tokenData.sellTax || tokenData.totalSellFee || "0");
   if (sellTax > 50) honeypot = true;
 
-  liquidity = parseFloat(tokenData.liquidityUsd || tokenData.marketCapUsd || "0");
-  if (!liquidity && liqRaw) {
-    liquidity = parseFloat(liqRaw.data?.totalLiquidity || liqRaw.totalLiquidity || "0");
-  }
+  // Liquidity — use multiple data sources
+  const liqFromPriceInfo = parseFloat(priceInfo.liquidity || priceInfo.liquidityUsd || "0");
+  const liqFromLiq = liqRaw ? parseFloat(liqRaw.data?.totalLiquidity || liqRaw.totalLiquidity || "0") : 0;
+  const liqFromInfo = parseFloat(tokenData.liquidityUsd || tokenData.marketCapUsd || "0");
+  liquidity = liqFromPriceInfo || liqFromLiq || liqFromInfo;
 
   // Holder concentration
   const holders = holdersRaw?.data || holdersRaw || [];
