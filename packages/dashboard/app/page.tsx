@@ -753,11 +753,9 @@ export default function Dashboard() {
                       {credits > 0 ? `${freeRemaining > 0 ? " + " : ""}${credits} ${t.creditsLeft}` : ""}
                       {freeRemaining === 0 && credits === 0 ? (lang === "zh" ? "额度已用完" : "No credits") : ""}
                     </span>
-                    {credits < 5 && (
-                      <button onClick={() => setShowPayment(true)} className="text-[10px] text-nexus-green hover:underline">
-                        {lang === "zh" ? "充值" : "Buy"}
-                      </button>
-                    )}
+                    <button onClick={() => setShowPayment(true)} className="text-[10px] px-2 py-0.5 rounded bg-nexus-green/15 text-nexus-green hover:bg-nexus-green/25">
+                      {lang === "zh" ? "购买额度" : "Buy Credits"}
+                    </button>
                   </div>
                   <div className="flex gap-2 mt-1">
                     {walletMode === "okx" && (
