@@ -39,22 +39,37 @@ async function askAgentNexus(message: string, authorId?: string): Promise<string
       const risk = await riskResp.json() as any;
       if (risk.checks && risk.price > 0) {
         const c = risk.checks;
+        const isChinese = /[\u4e00-\u9fa5]/.test(message);
         const price = risk.price < 0.01 ? `$${risk.price.toFixed(6)}` : `$${risk.price.toFixed(2)}`;
         const mcap = risk.market_cap > 1e6 ? `$${(risk.market_cap / 1e6).toFixed(2)}M` : `$${Math.round(risk.market_cap)}`;
         const liq = c.liquidity.usd_value > 1e3 ? `$${(c.liquidity.usd_value / 1e3).toFixed(0)}K` : `$${Math.round(c.liquidity.usd_value)}`;
-        const lines = [
+        const riskLabel: Record<string, string> = { low: isChinese ? "低" : "LOW", medium: isChinese ? "中" : "MEDIUM", high: isChinese ? "高" : "HIGH", critical: isChinese ? "极高" : "CRITICAL" };
+        const lines = isChinese ? [
           `${token.toUpperCase()} (XLayer)`,
           ``,
-          `${price} | MCap ${mcap} | Holders ${c.holders.count} | Liq ${liq}`,
+          `💰 价格: ${price}`,
+          `📊 市值: ${mcap}`,
+          `👥 持有人数: ${c.holders.count.toLocaleString()}`,
+          `💧 流动性: ${liq}`,
+          ``,
+          `${c.honeypot.passed ? "✅" : "❌"} 蜜罐: ${c.honeypot.passed ? "安全" : "危险"}`,
+          `${c.tax.passed ? "✅" : "⚠️"} 买卖税: ${c.tax.buy_tax}% / ${c.tax.sell_tax}%`,
+          `${c.dev_history.passed ? "✅" : "❌"} 开发者: ${c.dev_history.passed ? "无跑路记录" : "有跑路风险"}`,
+          ``,
+          `⚠️ 风险等级: ${riskLabel[risk.risk_level] || risk.risk_level}`,
+        ] : [
+          `${token.toUpperCase()} (XLayer)`,
+          ``,
+          `💰 Price: ${price}`,
+          `📊 MCap: ${mcap}`,
+          `👥 Holders: ${c.holders.count.toLocaleString()}`,
+          `💧 Liquidity: ${liq}`,
           ``,
           `${c.honeypot.passed ? "✅" : "❌"} Honeypot: ${c.honeypot.passed ? "Safe" : "DANGER"}`,
           `${c.tax.passed ? "✅" : "⚠️"} Tax: Buy ${c.tax.buy_tax}% / Sell ${c.tax.sell_tax}%`,
-          `${c.holders.passed ? "✅" : "⚠️"} Holders: ${c.holders.concentration}`,
-          `${c.dev_history.passed ? "✅" : "❌"} Dev: ${c.dev_history.detail}`,
+          `${c.dev_history.passed ? "✅" : "❌"} Dev: ${c.dev_history.passed ? "No rug history" : "Rug risk"}`,
           ``,
-          `Risk: ${risk.risk_level.toUpperCase()}`,
-          ``,
-          `— AgentNexus AI | ${SITE_URL}`,
+          `⚠️ Risk: ${riskLabel[risk.risk_level] || risk.risk_level}`,
         ];
         return lines.join("\n");
       }
