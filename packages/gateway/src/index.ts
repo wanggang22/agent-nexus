@@ -548,15 +548,14 @@ Rules:
 - Use the symbol or address as-is in {token} — the system will resolve symbols to addresses automatically.
 - For trade body fields (from_token, to_token), also use symbol or address as-is.
 - For "safe?", "rug?", "honeypot?" → risk/token-safety
-- For "analyze", "technical", "fundamental" without "deep"/"深度" → basic (free)
-- For "deep", "深度", "AI分析", "详细" → analyst deep (paid)
-- For "meme", "virality", "community" without "deep" → basic/meme (free)
-- For "full analysis", "全面分析" without "deep" → basic/full (free)
-- For "深度分析", "deep analysis", "AI analysis" → analysis/full (paid)
+- For "analyze", "technical", "fundamental", "分析", "技术面" → analysis/full (AI deep analysis)
+- For "meme", "virality", "community", "meme分析" → analysis/meme (AI deep analysis)
+- For "full analysis", "全面分析", "深度分析", "deep analysis" → analysis/full (AI deep analysis)
+- For "介绍", "怎么样", "info", "about", token name alone → analysis/full (always use AI deep analysis)
 - For "smart money", "聪明钱", "whale", "鲸鱼" → signals/smart-money or whale-alert
 - For "trending", "热门", "hot", "火" → signals/hot-tokens (preferred) or signals/trending
 - For "PnL", "盈亏", "win rate", "胜率", "我的交易", "trade history" → signals/wallet-pnl (use user's wallet)
-- For "bundle", "sniper", "捆绑", "狙击" → basic/meme-deep (more data than basic/meme)
+- For "bundle", "sniper", "捆绑", "狙击" → analysis/meme (AI deep analysis with bundle data)
 - For "谁买了", "who bought", "co-investor", "aped" → signals/aped-wallets
 - For "我有多少", "balance", "余额" + token → risk/token-balances
 - For specific token PnL like "我的ETH盈亏" → signals/token-pnl
