@@ -787,9 +787,9 @@ export default function Dashboard() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* ── CHAT VIEW ── */}
         {activeView === "chat" && (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col overflow-hidden">
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto" ref={chatScrollRef}>
+            <div className="flex-1 overflow-y-auto min-h-0" ref={chatScrollRef}>
               {!activeChat || activeChat.messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-nexus-accent to-nexus-green flex items-center justify-center mb-4 shadow-lg shadow-nexus-accent/20">
