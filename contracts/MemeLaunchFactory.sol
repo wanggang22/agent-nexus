@@ -36,11 +36,6 @@ interface INonfungiblePositionManager {
     );
 }
 
-interface IWOKB {
-    function deposit() external payable;
-    function approve(address spender, uint256 amount) external returns (bool);
-}
-
 contract MemeToken {
     string public name;
     string public symbol;
@@ -91,7 +86,7 @@ contract MemeLaunchFactory {
     address public immutable nfpm;
     address public immutable wokb;
     uint24 public constant FEE = 10000; // 1%
-    uint256 public constant SEED_OKB = 0.001 ether; // 0.001 OKB (~$0.09)
+    // Single-sided liquidity — zero OKB from user
 
     mapping(uint256 => address) public lpCreator;
     mapping(address => address) public tokenCreator;
@@ -115,9 +110,7 @@ contract MemeLaunchFactory {
         int24 tickLower,
         int24 tickUpper,
         uint160 sqrtPriceX96
-    ) external payable returns (address token, uint256 tokenId) {
-        require(msg.value >= SEED_OKB, "Send 0.001 OKB");
-
+    ) external returns (address token, uint256 tokenId) {
         // 1. Deploy token
         MemeToken t = new MemeToken(name, symbol, totalSupply);
         token = address(t);
@@ -132,17 +125,13 @@ contract MemeLaunchFactory {
             token0, token1, FEE, sqrtPriceX96
         );
 
-        // 4. Wrap OKB → WOKB
-        IWOKB(wokb).deposit{value: SEED_OKB}();
-
-        // 5. Approve NFPM
+        // 4. Approve NFPM
         MemeToken(token).approve(nfpm, totalSupply);
-        IWOKB(wokb).approve(nfpm, SEED_OKB);
 
-        // 6. Add dual-sided liquidity — LP locked in factory
+        // 5. Add single-sided liquidity — LP locked in factory
         bool tokenIsToken0 = token < wokb;
-        uint256 amount0 = tokenIsToken0 ? totalSupply : SEED_OKB;
-        uint256 amount1 = tokenIsToken0 ? SEED_OKB : totalSupply;
+        uint256 amount0 = tokenIsToken0 ? totalSupply : 0;
+        uint256 amount1 = tokenIsToken0 ? 0 : totalSupply;
 
         (tokenId,,,) = INonfungiblePositionManager(nfpm).mint(
             INonfungiblePositionManager.MintParams({
@@ -162,11 +151,6 @@ contract MemeLaunchFactory {
 
         lpCreator[tokenId] = msg.sender;
         tokenCreator[token] = msg.sender;
-
-        // Refund excess OKB
-        if (msg.value > SEED_OKB) {
-            payable(msg.sender).transfer(msg.value - SEED_OKB);
-        }
 
         emit TokenLaunched(msg.sender, token, pool, tokenId);
     }

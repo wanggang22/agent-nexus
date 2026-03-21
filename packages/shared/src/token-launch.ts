@@ -12,7 +12,7 @@
 export const XLAYER_WOKB = "0xe538905cf8410324e03A5A23C1c177a474D59b2b";
 export const UNISWAP_V3_FACTORY = "0x4b2ab38dbf28d31d467aa8993f6c2585981d6804";
 export const UNISWAP_V3_NFPM = "0x315e413a11ab0df498ef83873012430ca36638ae";
-export const LAUNCH_FACTORY = "0x5cebe1fa24cc3517ffa5e0df3179bb6757bd8f0a";
+export const LAUNCH_FACTORY = "0x4e9a57021c86c9c16c109a96ff3cb8cd778f0316";
 export const XLAYER_RPC = "https://rpc.xlayer.tech";
 export const XLAYER_CHAIN_ID_HEX = "0xc4";
 
@@ -99,7 +99,7 @@ function buildFactoryLaunchTx(p: {
   return {
     to: LAUNCH_FACTORY,
     data,
-    value: "0x" + (10n ** 15n).toString(16), // 0.001 OKB seed liquidity
+    value: "0x0", // zero OKB — single-sided liquidity
     chainId: XLAYER_CHAIN_ID_HEX,
     gas: "0x500000", // 5M gas (deploys token + wraps OKB + creates pool + adds liquidity)
   };
@@ -182,16 +182,15 @@ export async function generateLaunchPlan(params: {
   let poolSqrtPriceX96: bigint;
 
   if (tokenIsToken0) {
-    // Dual-sided: price inside range, 0.001 OKB seed liquidity
+    // Single-sided: price below range, 100% token0
     tickLower = priceTick;
     tickUpper = MAX_TICK;
-    // Price 1 tick inside range so both tokens are active
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + 1);
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - 1);
   } else {
     tickLower = MIN_TICK;
     tickUpper = priceTick;
-    // Price 1 tick inside range
-    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - 1);
+    // Single-sided: price above range, 100% token1
+    poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick + 1);
   }
 
   const tradeUrl = `https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${predictedToken}`;
