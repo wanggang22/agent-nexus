@@ -192,7 +192,7 @@ export async function generateLaunchPlan(params: {
     poolSqrtPriceX96 = tickToSqrtPriceX96(priceTick - 1);
   }
 
-  const tradeUrl = `https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${predictedToken}`;
+  const tradeUrl = `https://app.uniswap.org/swap?chain=xlayer&outputCurrency=${predictedToken}`;
 
   return {
     tokenName: params.name,

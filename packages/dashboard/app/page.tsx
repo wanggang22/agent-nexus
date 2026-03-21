@@ -871,7 +871,7 @@ export default function Dashboard() {
                     {launchTradeUrl && (
                       <a href={launchTradeUrl} target="_blank" rel="noreferrer"
                          className="btn-primary text-sm bg-nexus-accent hover:bg-nexus-accent/85">
-                        {lang === "zh" ? "在 OKX DEX 交易" : "Trade on OKX DEX"} &#x2197;
+                        {lang === "zh" ? "在 Uniswap 交易" : "Trade on Uniswap"} &#x2197;
                       </a>
                     )}
                     {activeLaunch.tokenId && (
@@ -949,7 +949,7 @@ export default function Dashboard() {
                               <p className="text-[10px] font-mono text-nexus-muted truncate">{l.address}</p>
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
-                              <a href={`https://web3.okx.com/dex-swap#inputChain=196&inputCurrency=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&outputCurrency=${l.address}`}
+                              <a href={`https://app.uniswap.org/swap?chain=xlayer&outputCurrency=${l.address}`}
                                  target="_blank" rel="noreferrer"
                                  className="text-[10px] px-2 py-1 rounded-lg bg-nexus-accent/20 text-nexus-accent-light hover:bg-nexus-accent/30">
                                 {lang === "zh" ? "交易" : "Trade"}
